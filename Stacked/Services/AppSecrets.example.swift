@@ -1,0 +1,11 @@
+//
+//  AppSecrets.example.swift
+//  Stacked
+//
+//  Copy this file to AppSecrets.swift and paste your ISBNdb API key.
+//  AppSecrets.swift is gitignored and will not be committed.
+//
+
+enum AppSecrets {
+    static let isbndbAPIKey = ""
+}
