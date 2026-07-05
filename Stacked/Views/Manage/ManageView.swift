@@ -26,32 +26,33 @@ struct ManageView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    locationChips
-                        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 4, trailing: 0))
-                        .listRowSeparator(.hidden)
+            VStack(spacing: 0) {
+                if showsFilterChips {
+                    filterChips
+                        .background(.background)
+
+                    Divider()
                 }
 
-                Section {
-                    formatChips
-                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 6, trailing: 0))
-                        .listRowSeparator(.hidden)
-                }
-
-                if filteredBooks.isEmpty {
-                    emptyState
-                        .listRowSeparator(.hidden)
-                } else {
-                    ForEach(visibleBooks) { book in
-                        NavigationLink(value: book) {
-                            BookTile(book: book)
+                List {
+                    if filteredBooks.isEmpty {
+                        emptyState
+                            .listRowSeparator(.hidden)
+                    } else {
+                        ForEach(visibleBooks) { book in
+                            NavigationLink(value: book) {
+                                BookTile(
+                                    book: book,
+                                    showFormatChip: shouldShowFormatChipOnItems,
+                                    showLocationChip: shouldShowLocationChipOnItems
+                                )
+                            }
+                            .onAppear { loadMoreIfNeeded(currentItem: book) }
                         }
-                        .onAppear { loadMoreIfNeeded(currentItem: book) }
                     }
                 }
+                .listStyle(.plain)
             }
-            .listStyle(.plain)
             .navigationTitle("Library")
             .searchable(text: $searchText, prompt: "Search title, author, ISBN")
             .toolbar {
@@ -77,6 +78,32 @@ struct ManageView: View {
     }
 
     // MARK: Chips
+
+    private var showsFilterChips: Bool {
+        locations.count > 1 || formats.count > 1
+    }
+
+    private var filterChips: some View {
+        VStack(spacing: 8) {
+            if locations.count > 1 {
+                locationChips
+            }
+            if formats.count > 1 {
+                formatChips
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    /// Hide when there is only one location, or when a single location filter is active.
+    private var shouldShowLocationChipOnItems: Bool {
+        locations.count > 1 && selectedLocationIDs.count != 1
+    }
+
+    /// Hide when there is only one format, or when a single format filter is active.
+    private var shouldShowFormatChipOnItems: Bool {
+        formats.count > 1 && selectedFormatIDs.count != 1
+    }
 
     private var locationChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {

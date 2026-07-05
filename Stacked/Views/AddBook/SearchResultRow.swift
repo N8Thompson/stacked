@@ -14,14 +14,14 @@ struct SearchResultRow: View {
     let ownedCopies: Int
     let onAdd: (Int) -> Void
 
+    @Environment(AppSettings.self) private var appSettings
     @State private var count = 1
     @State private var justAdded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
-                CoverImageView(urlString: result.coverURL)
-                    .frame(width: 60, height: 88)
+                CoverImageView(urlString: result.coverURL, maxWidth: 60, maxHeight: 88)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(result.title).font(.headline).lineLimit(3)
@@ -29,14 +29,13 @@ struct SearchResultRow: View {
                         Text(result.authorsText)
                             .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
                     }
-                    if !result.publisher.isEmpty || result.publishedYear != nil {
-                        Text([result.publisher, result.publishedYear.map(String.init)]
-                            .compactMap { $0 }
-                            .filter { !$0.isEmpty }
-                            .joined(separator: " · "))
+                    if !detailLine.isEmpty {
+                        Text(detailLine)
                             .font(.caption).foregroundStyle(.secondary)
                     }
-                    if let price = Formatters.money(result.listPrice) {
+                    if appSettings.showCostTracking,
+                       result.listPrice > 0,
+                       let price = Formatters.money(result.listPrice) {
                         Text(price).font(.caption).foregroundStyle(.secondary)
                     }
                     if ownedCopies > 0 {
@@ -64,6 +63,13 @@ struct SearchResultRow: View {
             }
         }
         .padding(.vertical, 6)
+    }
+
+    private var detailLine: String {
+        [result.publisher, result.publishedYear.map(String.init), result.binding]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
     }
 
     private var buttonTitle: String {

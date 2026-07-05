@@ -20,7 +20,7 @@ struct BookSearchResult: Identifiable, Hashable {
     var publishedYear: Int?
     var coverURL: String
     var synopsis: String
-    var listPrice: Double?
+    var listPrice: Double
     /// Physical edition from the catalog (e.g. Paperback, Hardcover).
     var binding: String?
 

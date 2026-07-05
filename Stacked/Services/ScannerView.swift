@@ -17,7 +17,7 @@ enum ScanMode {
 
 struct ScannerView: UIViewControllerRepresentable {
     let mode: ScanMode
-    /// Called with recognized text (for .text) or the barcode payload (for .barcode).
+    /// Called when the user taps recognized text, or when a barcode is detected.
     let onScan: (String) -> Void
 
     static var isSupported: Bool {
@@ -47,7 +47,11 @@ struct ScannerView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ controller: DataScannerViewController, context: Context) {
-        try? controller.startScanning()
+        context.coordinator.mode = mode
+        context.coordinator.onScan = onScan
+        if !controller.isScanning {
+            try? controller.startScanning()
+        }
     }
 
     static func dismantleUIViewController(_ controller: DataScannerViewController, coordinator: Coordinator) {
@@ -55,18 +59,25 @@ struct ScannerView: UIViewControllerRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onScan: onScan)
+        Coordinator(mode: mode, onScan: onScan)
     }
 
     final class Coordinator: NSObject, DataScannerViewControllerDelegate {
-        let onScan: (String) -> Void
-        private var hasReportedBarcode = false
+        var mode: ScanMode
+        var onScan: (String) -> Void
 
-        init(onScan: @escaping (String) -> Void) {
+        init(mode: ScanMode, onScan: @escaping (String) -> Void) {
+            self.mode = mode
             self.onScan = onScan
         }
 
         func dataScanner(_ dataScanner: DataScannerViewController, didTapOn item: RecognizedItem) {
+            switch mode {
+            case .text:
+                guard case .text = item else { return }
+            case .barcode:
+                guard case .barcode = item else { return }
+            }
             report(item)
         }
 
@@ -75,13 +86,10 @@ struct ScannerView: UIViewControllerRepresentable {
             didAdd addedItems: [RecognizedItem],
             allItems: [RecognizedItem]
         ) {
-            // Auto-report the first barcode found; text is reported on tap.
-            guard !hasReportedBarcode else { return }
+            guard mode == .barcode else { return }
             for item in addedItems {
                 if case .barcode(let barcode) = item, let payload = barcode.payloadStringValue {
-                    hasReportedBarcode = true
                     onScan(payload)
-                    return
                 }
             }
         }

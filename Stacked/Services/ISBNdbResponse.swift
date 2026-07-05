@@ -47,7 +47,7 @@ struct ISBNdbBook: Decodable {
             publishedYear: Self.year(from: datePublished),
             coverURL: image ?? "",
             synopsis: (synopsis ?? overview ?? "").strippingHTML(),
-            listPrice: msrp?.value.flatMap { $0 > 0 ? $0 : nil },
+            listPrice: msrp?.value.flatMap { $0 > 0 ? $0 : nil } ?? 0,
             binding: binding?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         )
     }

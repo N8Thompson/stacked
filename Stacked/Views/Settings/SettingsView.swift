@@ -2,7 +2,7 @@
 //  SettingsView.swift
 //  Stacked
 //
-//  Manage Locations and Formats: add, rename, delete, and choose the default.
+//  Manage Locations, Formats, and Bindings: add, rename, delete, and choose the default.
 //
 
 import SwiftUI
@@ -10,15 +10,30 @@ import SwiftData
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppSettings.self) private var appSettings
 
     @Query(sort: \StorageLocation.createdAt) private var locations: [StorageLocation]
     @Query(sort: \ItemFormat.createdAt) private var formats: [ItemFormat]
+    @Query(sort: \ItemBinding.createdAt) private var bindings: [ItemBinding]
 
     @State private var editor: NameEditorTarget?
 
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    Toggle("Track item costs", isOn: Bindable(appSettings).showCostTracking)
+                    if appSettings.showCostTracking {
+                        NavigationLink {
+                            CostView()
+                        } label: {
+                            Label("Cost information", systemImage: "dollarsign.circle")
+                        }
+                    }
+                } footer: {
+                    Text("This will allow you to see costs associated with your collection and include them when exporting your library.")
+                }
+
                 Section {
                     ForEach(locations) { location in
                         row(
@@ -38,7 +53,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Locations")
                 } footer: {
-                    Text("Where items are stored (e.g. Home Library, Office). New items go to the default location.")
+                    Text("Where items are stored (e.g. Home Library, Office).")
                 }
 
                 Section {
@@ -60,7 +75,29 @@ struct SettingsView: View {
                 } header: {
                     Text("Formats")
                 } footer: {
-                    Text("The kind of item (e.g. Book, Journal, Magazine). New items use the default format.")
+                    Text("The kind of item (e.g. Books, Journals, Magazines, Digital).")
+                }
+
+                Section {
+                    ForEach(bindings) { binding in
+                        row(
+                            name: binding.name,
+                            isDefault: binding.isDefault,
+                            canDelete: true,
+                            onRename: { editor = renameBinding(binding) },
+                            onMakeDefault: binding.isDefault ? nil : { makeDefaultBinding(binding) },
+                            onDelete: { deleteBinding(binding) }
+                        )
+                    }
+                    Button {
+                        editor = addBinding()
+                    } label: {
+                        Label("Add binding", systemImage: "plus")
+                    }
+                } header: {
+                    Text("Bindings")
+                } footer: {
+                    Text("Physical edition (e.g. Paperback, Hardcover, Spiral).")
                 }
             }
             .navigationTitle("Settings")
@@ -179,48 +216,36 @@ struct SettingsView: View {
         }
         try? modelContext.save()
     }
-}
 
-// MARK: - Name editor
+    // MARK: Binding actions
 
-struct NameEditorTarget: Identifiable {
-    let id = UUID()
-    let title: String
-    let initialName: String
-    let onSave: (String) -> Void
-}
-
-private struct NameEditorSheet: View {
-    let target: NameEditorTarget
-    @Environment(\.dismiss) private var dismiss
-    @State private var name: String = ""
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                TextField("Name", text: $name)
-                    #if os(iOS)
-                    .textInputAutocapitalization(.words)
-                    #endif
-            }
-            .navigationTitle(target.title)
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        target.onSave(name.trimmingCharacters(in: .whitespacesAndNewlines))
-                        dismiss()
-                    }
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-            .onAppear { name = target.initialName }
+    private func addBinding() -> NameEditorTarget {
+        NameEditorTarget(title: "New Binding", initialName: "") { name in
+            let isFirst = bindings.isEmpty
+            modelContext.insert(ItemBinding(name: name, isDefault: isFirst))
+            try? modelContext.save()
         }
-        .presentationDetents([.height(180)])
+    }
+
+    private func renameBinding(_ binding: ItemBinding) -> NameEditorTarget {
+        NameEditorTarget(title: "Rename Binding", initialName: binding.name) { name in
+            binding.name = name
+            try? modelContext.save()
+        }
+    }
+
+    private func makeDefaultBinding(_ binding: ItemBinding) {
+        for other in bindings { other.isDefault = false }
+        binding.isDefault = true
+        try? modelContext.save()
+    }
+
+    private func deleteBinding(_ binding: ItemBinding) {
+        let wasDefault = binding.isDefault
+        modelContext.delete(binding)
+        if wasDefault, let next = bindings.first(where: { $0.persistentModelID != binding.persistentModelID }) {
+            next.isDefault = true
+        }
+        try? modelContext.save()
     }
 }

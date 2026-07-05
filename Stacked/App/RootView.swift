@@ -10,6 +10,10 @@ import SwiftUI
 struct RootView: View {
     @Environment(AppRouter.self) private var router
 
+    private var mainTabs: [AppTab] {
+        AppTab.mainTabs
+    }
+
     var body: some View {
         #if os(macOS)
         macBody
@@ -23,7 +27,7 @@ struct RootView: View {
     private var tabBody: some View {
         @Bindable var router = router
         return TabView(selection: $router.selectedTab) {
-            ForEach(AppTab.allCases) { tab in
+            ForEach(mainTabs) { tab in
                 destination(for: tab)
                     .tabItem { Label(tab.title, systemImage: tab.systemImage) }
                     .tag(tab)
@@ -37,7 +41,7 @@ struct RootView: View {
     private var macBody: some View {
         @Bindable var router = router
         return NavigationSplitView {
-            List(AppTab.allCases, selection: Binding(
+            List(mainTabs, selection: Binding(
                 get: { router.selectedTab },
                 set: { if let value = $0 { router.selectedTab = value } }
             )) { tab in

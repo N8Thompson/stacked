@@ -11,6 +11,7 @@ import SwiftData
 
 struct HomeView: View {
     @Environment(AppRouter.self) private var router
+    @Environment(AppSettings.self) private var appSettings
 
     @Query(sort: \Book.title) private var books: [Book]
     @Query(sort: \StorageLocation.createdAt) private var locations: [StorageLocation]
@@ -67,13 +68,14 @@ struct HomeView: View {
 
     private var summaryHeader: some View {
         let totalCopies = books.reduce(0) { $0 + $1.copies }
-        let totalValue = books.reduce(0) { $0 + $1.totalValue }
+        let estimatedTotal = books.totalEstimatedValue
+        let costTotal = books.totalCost
         return VStack(alignment: .leading, spacing: 4) {
             Text("Your Collection").font(.title2.bold())
-            Text("\(books.count) titles · \(totalCopies) copies")
+            Text("\(books.count) unique \(books.count == 1 ? "title" : "titles") · \(totalCopies) total \(totalCopies == 1 ? "copy" : "copies")")
                 .foregroundStyle(.secondary)
-            if totalValue > 0, let money = Formatters.money(totalValue) {
-                Text("Estimated value \(money)")
+            if appSettings.showCostTracking {
+                Text("Estimated value \(Formatters.money(estimatedTotal) ?? "$0.00") · Cost \(Formatters.money(costTotal) ?? "$0.00")")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -124,6 +126,8 @@ private struct SummaryTile: View {
     let systemImage: String
     let action: () -> Void
 
+    @Environment(AppSettings.self) private var appSettings
+
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 8) {
@@ -138,7 +142,7 @@ private struct SummaryTile: View {
                 Text("\(count) \(count == 1 ? "item" : "items")")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                if value > 0, let money = Formatters.money(value) {
+                if appSettings.showCostTracking, value > 0, let money = Formatters.money(value) {
                     Text(money)
                         .font(.caption)
                         .foregroundStyle(.secondary)

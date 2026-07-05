@@ -11,12 +11,14 @@ import SwiftData
 @main
 struct StackedApp: App {
     @State private var router = AppRouter()
+    @State private var appSettings = AppSettings()
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Book.self,
             StorageLocation.self,
             ItemFormat.self,
+            ItemBinding.self,
         ])
         // CloudKit sync is iOS-only; personal dev teams can't use iCloud on macOS.
         #if os(iOS)
@@ -43,6 +45,7 @@ struct StackedApp: App {
         WindowGroup {
             RootView()
                 .environment(router)
+                .environment(appSettings)
                 .task {
                     SeedData.seedIfNeeded(sharedModelContainer.mainContext)
                 }

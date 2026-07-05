@@ -22,8 +22,7 @@ struct DeleteCopiesSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 20) {
-                CoverImageView(book: book)
-                    .frame(width: 90, height: 130)
+                CoverImageView(book: book, maxWidth: 90, maxHeight: 130)
                 Text(book.title).font(.headline).multilineTextAlignment(.center)
 
                 if book.copies > 1 {

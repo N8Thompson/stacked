@@ -34,23 +34,39 @@ struct CostView: View {
 
     // MARK: Totals
 
-    private var grandTotal: Double { books.reduce(0) { $0 + $1.totalValue } }
+    private var estimatedTotal: Double { books.totalEstimatedValue }
+    private var costTotal: Double { books.totalCost }
     private var totalCopies: Int { books.reduce(0) { $0 + $1.copies } }
-    private var actualCount: Int { books.filter { $0.actualCost != nil }.count }
+    private var showsSplitTotals: Bool { books.hasAnyActualCost }
 
     private var totalsSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(Formatters.money(grandTotal) ?? "$0.00")
-                    .font(.system(size: 40, weight: .bold, design: .rounded))
-                Text("Estimated total value")
-                    .foregroundStyle(.secondary)
-                Text("\(books.count) titles · \(totalCopies) copies · \(actualCount) with actual cost")
+            VStack(alignment: .leading, spacing: 8) {
+                if showsSplitTotals {
+                    HStack(alignment: .top, spacing: 24) {
+                        totalColumn(amount: estimatedTotal, label: "Estimated value")
+                        totalColumn(amount: costTotal, label: "Cost")
+                    }
+                } else {
+                    totalColumn(amount: estimatedTotal, label: "Estimated value", large: true)
+                }
+
+                Text("\(books.count) unique \(books.count == 1 ? "title" : "titles") · \(totalCopies) total \(totalCopies == 1 ? "copy" : "copies")")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
             .padding(.vertical, 6)
         }
+    }
+
+    private func totalColumn(amount: Double, label: String, large: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(Formatters.money(amount) ?? "$0.00")
+                .font(.system(size: large ? 40 : 32, weight: .bold, design: .rounded))
+            Text(label)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: Breakdown
@@ -63,7 +79,7 @@ struct CostView: View {
                     breakdownRow(
                         name: location.name,
                         copies: subset.reduce(0) { $0 + $1.copies },
-                        value: subset.reduce(0) { $0 + $1.totalValue }
+                        value: subset.totalCost
                     )
                 }
             }
@@ -72,7 +88,7 @@ struct CostView: View {
                 breakdownRow(
                     name: "Unassigned",
                     copies: unassigned.reduce(0) { $0 + $1.copies },
-                    value: unassigned.reduce(0) { $0 + $1.totalValue }
+                    value: unassigned.totalCost
                 )
             }
         }
@@ -114,9 +130,8 @@ struct CostView: View {
 
     // MARK: Regeneration
 
-    /// Changes whenever the collection's value-relevant state changes.
     private var signature: String {
-        "\(books.count)-\(totalCopies)-\(grandTotal)"
+        "\(books.count)-\(totalCopies)-\(estimatedTotal)-\(costTotal)"
     }
 
     private func regenerateExports() {
