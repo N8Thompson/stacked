@@ -7,7 +7,6 @@
 //
 
 import Foundation
-import SwiftData
 
 enum AppTab: Int, Hashable, CaseIterable, Identifiable {
     case home
@@ -41,19 +40,18 @@ final class AppRouter {
     var selectedTab: AppTab = .home
 
     /// A one-shot filter request produced when the user taps a Home tile.
-    /// Manage consumes and clears it when it appears.
     var pendingFilter: ManageFilterRequest?
 
     func openManage(location: StorageLocation? = nil, format: ItemFormat? = nil) {
         pendingFilter = ManageFilterRequest(
-            locationID: location?.persistentModelID,
-            formatID: format?.persistentModelID
+            locationID: location?.id,
+            formatID: format?.id
         )
         selectedTab = .manage
     }
 }
 
 struct ManageFilterRequest {
-    var locationID: PersistentIdentifier?
-    var formatID: PersistentIdentifier?
+    var locationID: UUID?
+    var formatID: UUID?
 }

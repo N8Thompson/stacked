@@ -7,7 +7,6 @@
 //
 
 import SwiftUI
-import SwiftData
 
 enum TaxonomyKind {
     case location
@@ -29,6 +28,14 @@ enum TaxonomyKind {
         case .binding: return "New Binding"
         }
     }
+
+    var lowercaseName: String {
+        switch self {
+        case .location: return "location"
+        case .format: return "format"
+        case .binding: return "binding"
+        }
+    }
 }
 
 struct TaxonomyPickerView: View {
@@ -37,35 +44,47 @@ struct TaxonomyPickerView: View {
     @Binding var selectedFormat: ItemFormat?
     @Binding var selectedBinding: ItemBinding?
 
-    @Environment(\.modelContext) private var modelContext
+    @Environment(HouseholdManager.self) private var householdManager
+    @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
-
-    @Query(sort: \StorageLocation.createdAt) private var locations: [StorageLocation]
-    @Query(sort: \ItemFormat.createdAt) private var formats: [ItemFormat]
-    @Query(sort: \ItemBinding.createdAt) private var bindings: [ItemBinding]
 
     @State private var addEditor: NameEditorTarget?
 
+    private var locations: [StorageLocation] { householdManager.locations }
+    private var formats: [ItemFormat] { householdManager.formats }
+    private var bindings: [ItemBinding] { householdManager.bindings }
+
     var body: some View {
+        listContent
+            .navigationTitle("Select \(kind.title)")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .sheet(item: $addEditor) { target in
+                NameEditorSheet(target: target)
+            }
+    }
+
+    private var listContent: some View {
         List {
             switch kind {
             case .location:
                 ForEach(locations) { location in
-                    optionRow(title: location.name, isSelected: selectedLocation?.persistentModelID == location.persistentModelID) {
+                    optionRow(title: location.name, isSelected: selectedLocation?.id == location.id) {
                         selectedLocation = location
                         dismiss()
                     }
                 }
             case .format:
                 ForEach(formats) { format in
-                    optionRow(title: format.name, isSelected: selectedFormat?.persistentModelID == format.persistentModelID) {
+                    optionRow(title: format.name, isSelected: selectedFormat?.id == format.id) {
                         selectedFormat = format
                         dismiss()
                     }
                 }
             case .binding:
                 ForEach(bindings) { binding in
-                    optionRow(title: binding.name, isSelected: selectedBinding?.persistentModelID == binding.persistentModelID) {
+                    optionRow(title: binding.name, isSelected: selectedBinding?.id == binding.id) {
                         selectedBinding = binding
                         dismiss()
                     }
@@ -79,13 +98,6 @@ struct TaxonomyPickerView: View {
             } label: {
                 Label("Add new…", systemImage: "plus")
             }
-        }
-        .navigationTitle("Select \(kind.title)")
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .sheet(item: $addEditor) { target in
-            NameEditorSheet(target: target)
         }
     }
 
@@ -104,23 +116,24 @@ struct TaxonomyPickerView: View {
 
     @MainActor
     private func insertAndSelect(name: String) {
+        guard let household = householdManager.activeHousehold else { return }
         switch kind {
         case .location:
-            if let location = TaxonomyService.findOrCreateLocation(name: name, in: modelContext) {
+            if let location = TaxonomyService.findOrCreateLocation(name: name, household: household, in: context) {
                 selectedLocation = location
-                try? modelContext.save()
+                PersistenceController.shared.save()
                 dismiss()
             }
         case .format:
-            if let format = TaxonomyService.findOrCreateFormat(name: name, in: modelContext) {
+            if let format = TaxonomyService.findOrCreateFormat(name: name, household: household, in: context) {
                 selectedFormat = format
-                try? modelContext.save()
+                PersistenceController.shared.save()
                 dismiss()
             }
         case .binding:
-            if let binding = TaxonomyService.findOrCreateBinding(name: name, in: modelContext) {
+            if let binding = TaxonomyService.findOrCreateBinding(name: name, household: household, in: context) {
                 selectedBinding = binding
-                try? modelContext.save()
+                PersistenceController.shared.save()
                 dismiss()
             }
         }

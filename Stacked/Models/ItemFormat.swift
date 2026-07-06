@@ -2,29 +2,38 @@
 //  ItemFormat.swift
 //  Stacked
 //
-//  A user-facing "Format" describing the kind of item (e.g. Book, Journal, Magazine).
-//
 
+import CoreData
 import Foundation
-import SwiftData
 
-@Model
-final class ItemFormat {
-    var name: String = ""
-    var isDefault: Bool = false
-    var createdAt: Date = Date()
+@objc(ItemFormat)
+public class ItemFormat: NSManagedObject, Identifiable {
+    @NSManaged public var idString: String
+    @NSManaged public var name: String
+    @NSManaged public var isDefault: Bool
+    @NSManaged public var createdAt: Date?
+    @NSManaged public var household: Household?
+    @NSManaged public var books: NSSet?
 
-    // Inverse of Book.format. Optional for CloudKit compatibility.
-    @Relationship(deleteRule: .nullify, inverse: \Book.format)
-    var books: [Book]? = nil
-
-    init(name: String, isDefault: Bool = false, createdAt: Date = Date()) {
-        self.name = name
-        self.isDefault = isDefault
-        self.createdAt = createdAt
+    @nonobjc public class func fetchRequest() -> NSFetchRequest<ItemFormat> {
+        NSFetchRequest<ItemFormat>(entityName: "ItemFormat")
     }
 
-    var bookCount: Int {
-        (books ?? []).reduce(0) { $0 + $1.copies }
+    public var id: UUID {
+        UUID(uuidString: idString) ?? UUID()
+    }
+
+    var titleCount: Int {
+        (books as? Set<Book> ?? []).count
+    }
+
+    static func create(in context: NSManagedObjectContext, household: Household, name: String, isDefault: Bool = false) -> ItemFormat {
+        let format = ItemFormat(context: context)
+        format.idString = UUID().uuidString
+        format.name = name
+        format.isDefault = isDefault
+        format.createdAt = Date()
+        format.household = household
+        return format
     }
 }

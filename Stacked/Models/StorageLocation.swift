@@ -2,29 +2,42 @@
 //  StorageLocation.swift
 //  Stacked
 //
-//  A user-facing "Location" where items are stored (e.g. Home Library, Office).
-//
 
+import CoreData
 import Foundation
-import SwiftData
 
-@Model
-final class StorageLocation {
-    var name: String = ""
-    var isDefault: Bool = false
-    var createdAt: Date = Date()
+@objc(StorageLocation)
+public class StorageLocation: NSManagedObject, Identifiable {
+    @NSManaged public var idString: String
+    @NSManaged public var name: String
+    @NSManaged public var isDefault: Bool
+    @NSManaged public var createdAt: Date?
+    @NSManaged public var household: Household?
+    @NSManaged public var books: NSSet?
 
-    // Inverse of Book.location. Optional for CloudKit compatibility.
-    @Relationship(deleteRule: .nullify, inverse: \Book.location)
-    var books: [Book]? = nil
+    @nonobjc public class func fetchRequest() -> NSFetchRequest<StorageLocation> {
+        NSFetchRequest<StorageLocation>(entityName: "StorageLocation")
+    }
 
-    init(name: String, isDefault: Bool = false, createdAt: Date = Date()) {
-        self.name = name
-        self.isDefault = isDefault
-        self.createdAt = createdAt
+    public var id: UUID {
+        UUID(uuidString: idString) ?? UUID()
     }
 
     var bookCount: Int {
-        (books ?? []).reduce(0) { $0 + $1.copies }
+        (books as? Set<Book> ?? []).reduce(0) { $0 + Int($1.copies) }
+    }
+
+    var titleCount: Int {
+        (books as? Set<Book> ?? []).count
+    }
+
+    static func create(in context: NSManagedObjectContext, household: Household, name: String, isDefault: Bool = false) -> StorageLocation {
+        let location = StorageLocation(context: context)
+        location.idString = UUID().uuidString
+        location.name = name
+        location.isDefault = isDefault
+        location.createdAt = Date()
+        location.household = household
+        return location
     }
 }

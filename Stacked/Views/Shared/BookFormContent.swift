@@ -6,16 +6,17 @@
 //
 
 import SwiftUI
-import SwiftData
 import PhotosUI
 
 struct BookFormContent: View {
-    @Bindable var book: Book
+    @ObservedObject var book: Book
     @Binding var location: StorageLocation?
     @Binding var format: ItemFormat?
     @Binding var bindingOption: ItemBinding?
 
     @Environment(AppSettings.self) private var appSettings
+    @Environment(CloudKitIdentityService.self) private var identity
+    @Environment(\.managedObjectContext) private var context
 
     let isEditing: Bool
     let isISBNEditable: Bool
@@ -26,6 +27,9 @@ struct BookFormContent: View {
 
     @State private var coverItem: PhotosPickerItem?
     @Binding var taxonomyPicker: TaxonomyKind?
+
+    @State private var actualCostText = ""
+    @State private var listPriceText = ""
 
     var body: some View {
         Group {
@@ -51,6 +55,10 @@ struct BookFormContent: View {
                         .foregroundStyle(.red)
                 }
             }
+        }
+        .onAppear(perform: syncPriceFieldsFromBook)
+        .onChange(of: isEditing) { _, editing in
+            if editing { syncPriceFieldsFromBook() }
         }
         .onChange(of: coverItem) { _, newValue in loadCover(newValue) }
     }
@@ -85,9 +93,9 @@ struct BookFormContent: View {
 
     private var detailsSection: some View {
         Section("Details") {
-            field("Title", text: $book.title)
-            field("Authors", text: $book.authors)
-            field("Publisher", text: $book.publisher)
+            field("Title", text: book.stringBinding(\.title))
+            field("Authors", text: book.stringBinding(\.authors))
+            field("Publisher", text: book.stringBinding(\.publisher))
             TaxonomyPickerRow(
                 label: "Binding",
                 value: bindingOption?.name ?? "",
@@ -104,12 +112,12 @@ struct BookFormContent: View {
                         #endif
                         .multilineTextAlignment(.trailing)
                 } else {
-                    Text(book.publishedYear.map(String.init) ?? "—").foregroundStyle(.secondary)
+                    Text(book.publishedYearValue.map(String.init) ?? "—").foregroundStyle(.secondary)
                 }
             }
             row("ISBN") {
                 if isEditing && isISBNEditable {
-                    TextField("Optional", text: $book.isbn)
+                    TextField("Optional", text: book.stringBinding(\.isbn))
                         #if os(iOS)
                         .keyboardType(.asciiCapable)
                         .textInputAutocapitalization(.never)
@@ -120,6 +128,12 @@ struct BookFormContent: View {
                     Text(book.isbn.isEmpty ? "—" : book.isbn)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
+                }
+            }
+            if !isEditing {
+                row("Added") {
+                    Text(identity.addedByLine(for: book))
+                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -134,11 +148,11 @@ struct BookFormContent: View {
     private var reviewSection: some View {
         Section {
             LabeledContent("Rating") {
-                StarRatingView(rating: $book.rating, isEditable: isEditing)
+                StarRatingView(rating: book.ratingBinding, isEditable: isEditing)
             }
             if isEditing || !book.reviewNotes.isEmpty {
                 if isEditing {
-                    TextField("Notes", text: $book.reviewNotes, axis: .vertical)
+                    TextField("Notes", text: book.stringBinding(\.reviewNotes), axis: .vertical)
                         .lineLimit(3...12)
                 } else {
                     Text(book.reviewNotes)
@@ -177,7 +191,7 @@ struct BookFormContent: View {
             }
             row("Copies") {
                 if isEditing {
-                    CountStepper(count: $book.copies)
+                    CountStepper(count: book.copiesBinding)
                 } else {
                     Text("\(book.copies)").foregroundStyle(.secondary)
                 }
@@ -208,7 +222,7 @@ struct BookFormContent: View {
                         #endif
                         .multilineTextAlignment(.trailing)
                 } else {
-                    Text(Formatters.money(book.actualCost) ?? "Not set").foregroundStyle(.secondary)
+                    Text(Formatters.money(book.actualCostValue) ?? "Not set").foregroundStyle(.secondary)
                 }
             }
             if book.copies > 1, book.totalValue > 0 {
@@ -230,7 +244,7 @@ struct BookFormContent: View {
     private var synopsisSection: some View {
         Section("Synopsis") {
             if isEditing {
-                TextField("Synopsis", text: $book.synopsis, axis: .vertical)
+                TextField("Synopsis", text: book.stringBinding(\.synopsis), axis: .vertical)
                     .lineLimit(3...10)
             } else {
                 Text(book.synopsis).foregroundStyle(.secondary)
@@ -267,28 +281,34 @@ struct BookFormContent: View {
 
     private var yearBinding: Binding<String> {
         Binding(
-            get: { book.publishedYear.map(String.init) ?? "" },
-            set: { book.publishedYear = Int($0.filter(\.isNumber)) }
+            get: { book.publishedYearValue.map(String.init) ?? "" },
+            set: { book.publishedYearValue = Int($0.filter(\.isNumber)) }
         )
     }
 
     private var actualCostBinding: Binding<String> {
         Binding(
-            get: { book.actualCost.map { String(format: "%.2f", $0) } ?? "" },
-            set: { book.actualCost = Double($0.filter { $0.isNumber || $0 == "." }) }
+            get: { actualCostText },
+            set: { newValue in
+                actualCostText = Formatters.sanitizeDecimalInput(newValue)
+                book.actualCostValue = Formatters.parseOptionalDecimal(actualCostText)
+            }
         )
     }
 
     private var listPriceBinding: Binding<String> {
         Binding(
-            get: {
-                book.listPrice == 0 ? "" : String(format: "%.2f", book.listPrice)
-            },
-            set: {
-                let parsed = Double($0.filter { $0.isNumber || $0 == "." })
-                book.listPrice = parsed ?? 0
+            get: { listPriceText },
+            set: { newValue in
+                listPriceText = Formatters.sanitizeDecimalInput(newValue)
+                book.listPrice = Formatters.parseOptionalDecimal(listPriceText) ?? 0
             }
         )
+    }
+
+    private func syncPriceFieldsFromBook() {
+        actualCostText = Formatters.editableDecimalString(from: book.actualCostValue)
+        listPriceText = book.listPrice == 0 ? "" : Formatters.editableDecimalString(from: book.listPrice)
     }
 
     private func loadCover(_ item: PhotosPickerItem?) {

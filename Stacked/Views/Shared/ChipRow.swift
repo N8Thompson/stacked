@@ -23,10 +23,14 @@ struct Chip: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
-            .background(
-                Capsule().fill(isSelected ? Color.accentColor : Color.secondary.opacity(0.15))
-            )
-            .foregroundStyle(isSelected ? Color.white : Color.primary)
+            .background {
+                if isSelected {
+                    Capsule().fill(StackedTheme.Gradient.accent)
+                } else {
+                    Capsule().fill(StackedTheme.Surface.track)
+                }
+            }
+            .foregroundStyle(isSelected ? StackedTheme.Text.onAccent : StackedTheme.Text.primary)
         }
         .buttonStyle(.plain)
     }

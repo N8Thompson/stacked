@@ -2,9 +2,7 @@
 //  BookSearchProvider.swift
 //  Stacked
 //
-//  Abstraction over the book metadata source. Two implementations exist:
-//  ISBNdbService (direct) and ProxyBookSearchService (our backend). The active
-//  provider is chosen by `Backend.current`.
+//  Abstraction over the book metadata source (ISBNdb direct API).
 //
 
 import Foundation
@@ -57,13 +55,7 @@ protocol BookSearchProvider {
 }
 
 enum BookSearchProviderFactory {
-    /// Returns the provider for the currently configured backend.
     static func make() -> BookSearchProvider {
-        switch Backend.current {
-        case .directISBNdb:
-            return ISBNdbService()
-        case .proxy(let baseURL):
-            return ProxyBookSearchService(baseURL: baseURL)
-        }
+        ISBNdbService()
     }
 }

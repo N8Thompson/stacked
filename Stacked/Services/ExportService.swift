@@ -32,7 +32,7 @@ enum ExportService {
     private static func bookPricingLines(for book: Book) -> (listLine: String, actualLine: String) {
         let listLine = "List price: Unit \(money(book.listPrice)) · Total \(money(book.totalListValue))"
         let actualLine: String
-        if let actual = book.actualCost {
+        if let actual = book.actualCostValue {
             let actualTotal = actual * Double(book.copies)
             actualLine = "Actual cost: Unit \(money(actual)) · Total \(money(actualTotal))"
         } else {
@@ -64,14 +64,14 @@ enum ExportService {
     static func csvData(from books: [Book]) -> Data {
         var rows = ["Title,Authors,ISBN,Format,Location,Copies,Unit Value,Total Value,Cost Basis"]
         for book in books.sorted(by: { $0.title < $1.title }) {
-            let basis = book.actualCost != nil ? "Actual" : (book.listPrice > 0 ? "List" : "None")
+            let basis = book.actualCostValue != nil ? "Actual" : (book.listPrice > 0 ? "List" : "None")
             let fields = [
                 book.title,
                 book.authors,
                 book.isbn,
                 book.format?.name ?? "",
                 book.location?.name ?? "",
-                String(book.copies),
+                String(Int(book.copies)),
                 String(format: "%.2f", book.effectiveUnitPrice),
                 String(format: "%.2f", book.totalValue),
                 basis,
@@ -183,7 +183,7 @@ enum ExportService {
         let dateText = DateFormatter.localizedString(from: Date(), dateStyle: .long, timeStyle: .short)
         let estimated = books.totalEstimatedValue
         let cost = books.totalCost
-        let totalCopies = books.reduce(0) { $0 + $1.copies }
+        let totalCopies = books.reduce(0) { $0 + Int($1.copies) }
         drawTextUIKit(
             "Generated \(dateText)",
             cursorY: &cursorY,
@@ -232,7 +232,7 @@ enum ExportService {
             var meta: [String] = []
             if let format = book.format?.name { meta.append(format) }
             if let location = book.location?.name { meta.append(location) }
-            meta.append("Copies: \(book.copies)")
+            meta.append("Copies: \(Int(book.copies))")
             if !book.isbn.isEmpty { meta.append("ISBN \(book.isbn)") }
             drawTextUIKit(
                 meta.joined(separator: "  ·  "),
@@ -275,16 +275,14 @@ enum ExportService {
     // MARK: macOS PDF
 
     #if canImport(AppKit)
-    private static func pdfDataAppKit(from books: [Book]) throws -> Data {
-        let data = NSMutableData()
-        var mediaBox = CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight)
-        guard let consumer = CGDataConsumer(data: data as CFMutableData),
-              let pdfContext = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else {
-            throw BookSearchError.transport("Could not create PDF context.")
-        }
+    private final class AppKitPDFLayout {
+        private let pdfContext: CGContext
+        private var pageOpen = false
+        var cursorY: CGFloat = margin
 
-        var cursorY = margin
-        var pageOpen = false
+        init(pdfContext: CGContext) {
+            self.pdfContext = pdfContext
+        }
 
         func beginPage() {
             if pageOpen {
@@ -305,49 +303,105 @@ enum ExportService {
             }
         }
 
-        beginPage()
-        cursorY = drawLogoAndTitleAppKit(at: cursorY, in: pdfContext)
-        drawTextAppKit(pricingExplanation, cursorY: &cursorY, fontSize: 10, bold: false, color: pdfPrimaryText, spacingAfter: 24, ensureSpace: ensureSpace)
+        func finish() {
+            if pageOpen {
+                pdfContext.restoreGState()
+                pdfContext.endPDFPage()
+            }
+            pdfContext.closePDF()
+        }
+
+        func drawText(
+            _ text: String,
+            fontSize: CGFloat,
+            bold: Bool,
+            color: NSColor,
+            spacingAfter: CGFloat
+        ) {
+            let font = NSFont.systemFont(ofSize: fontSize, weight: bold ? .bold : .regular)
+            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+            let height = ExportService.textHeightAppKit(text, width: contentWidth, attributes: attrs)
+            ensureSpace(height + spacingAfter)
+            let rect = CGRect(x: margin, y: cursorY, width: contentWidth, height: height)
+            NSAttributedString(string: text, attributes: attrs).draw(with: rect)
+            cursorY += height + spacingAfter
+        }
+
+        func drawLogoAndTitle() {
+            cursorY = ExportService.drawLogoAndTitleAppKit(at: cursorY, in: pdfContext)
+        }
+    }
+
+    private static func pdfDataAppKit(from books: [Book]) throws -> Data {
+        let data = NSMutableData()
+        var mediaBox = CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight)
+        guard let consumer = CGDataConsumer(data: data as CFMutableData),
+              let pdfContext = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else {
+            throw BookSearchError.transport("Could not create PDF context.")
+        }
+
+        let layout = AppKitPDFLayout(pdfContext: pdfContext)
+        layout.beginPage()
+        layout.drawLogoAndTitle()
+        layout.drawText(
+            pricingExplanation,
+            fontSize: 10,
+            bold: false,
+            color: pdfPrimaryText,
+            spacingAfter: 24
+        )
 
         let dateText = DateFormatter.localizedString(from: Date(), dateStyle: .long, timeStyle: .short)
         let estimated = books.totalEstimatedValue
         let cost = books.totalCost
-        let totalCopies = books.reduce(0) { $0 + $1.copies }
-        drawTextAppKit("Generated \(dateText)", cursorY: &cursorY, fontSize: 10, bold: false, color: pdfSecondaryText, spacingAfter: 2, ensureSpace: ensureSpace)
+        let totalCopies = books.reduce(0) { $0 + Int($1.copies) }
+        layout.drawText(
+            "Generated \(dateText)",
+            fontSize: 10,
+            bold: false,
+            color: pdfSecondaryText,
+            spacingAfter: 2
+        )
         let summary = books.hasAnyActualCost
             ? "\(books.count) unique titles · \(totalCopies) total copies · Estimated value \(money(estimated)) · Cost \(money(cost))"
             : "\(books.count) unique titles · \(totalCopies) total copies · Estimated value \(money(estimated))"
-        drawTextAppKit(summary, cursorY: &cursorY, fontSize: 10, bold: false, color: pdfSecondaryText, spacingAfter: 18, ensureSpace: ensureSpace)
+        layout.drawText(
+            summary,
+            fontSize: 10,
+            bold: false,
+            color: pdfSecondaryText,
+            spacingAfter: 18
+        )
 
         for book in books.sorted(by: { $0.title < $1.title }) {
-            drawTextAppKit(book.title, cursorY: &cursorY, fontSize: 13, bold: true, color: pdfPrimaryText, spacingAfter: 2, ensureSpace: ensureSpace)
+            layout.drawText(book.title, fontSize: 13, bold: true, color: pdfPrimaryText, spacingAfter: 2)
             if !book.authors.isEmpty {
-                drawTextAppKit("by \(book.authors)", cursorY: &cursorY, fontSize: 10, bold: false, color: pdfSecondaryText, spacingAfter: 2, ensureSpace: ensureSpace)
+                layout.drawText(
+                    "by \(book.authors)",
+                    fontSize: 10,
+                    bold: false,
+                    color: pdfSecondaryText,
+                    spacingAfter: 2
+                )
             }
             var meta: [String] = []
             if let format = book.format?.name { meta.append(format) }
             if let location = book.location?.name { meta.append(location) }
-            meta.append("Copies: \(book.copies)")
+            meta.append("Copies: \(Int(book.copies))")
             if !book.isbn.isEmpty { meta.append("ISBN \(book.isbn)") }
-            drawTextAppKit(meta.joined(separator: "  ·  "), cursorY: &cursorY, fontSize: 11, bold: false, color: pdfPrimaryText, spacingAfter: 2, ensureSpace: ensureSpace)
-            let pricing = bookPricingLines(for: book)
-            drawTextAppKit(pricing.listLine, cursorY: &cursorY, fontSize: 11, bold: false, color: pdfPrimaryText, spacingAfter: 2, ensureSpace: ensureSpace)
-            drawTextAppKit(
-                pricing.actualLine,
-                cursorY: &cursorY,
+            layout.drawText(
+                meta.joined(separator: "  ·  "),
                 fontSize: 11,
                 bold: false,
                 color: pdfPrimaryText,
-                spacingAfter: 14,
-                ensureSpace: ensureSpace
+                spacingAfter: 2
             )
+            let pricing = bookPricingLines(for: book)
+            layout.drawText(pricing.listLine, fontSize: 11, bold: false, color: pdfPrimaryText, spacingAfter: 2)
+            layout.drawText(pricing.actualLine, fontSize: 11, bold: false, color: pdfPrimaryText, spacingAfter: 14)
         }
 
-        if pageOpen {
-            pdfContext.restoreGState()
-            pdfContext.endPDFPage()
-        }
-        pdfContext.closePDF()
+        layout.finish()
         return data as Data
     }
 
@@ -370,24 +424,6 @@ enum ExportService {
             with: CGRect(x: titleX, y: titleY, width: titleWidth, height: titleHeight)
         )
         return y + rowHeight + 16
-    }
-
-    private static func drawTextAppKit(
-        _ text: String,
-        cursorY: inout CGFloat,
-        fontSize: CGFloat,
-        bold: Bool,
-        color: NSColor,
-        spacingAfter: CGFloat,
-        ensureSpace: (CGFloat) -> Void
-    ) {
-        let font = NSFont.systemFont(ofSize: fontSize, weight: bold ? .bold : .regular)
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
-        let height = textHeightAppKit(text, width: contentWidth, attributes: attrs)
-        ensureSpace(height + spacingAfter)
-        let rect = CGRect(x: margin, y: cursorY, width: contentWidth, height: height)
-        NSAttributedString(string: text, attributes: attrs).draw(with: rect)
-        cursorY += height + spacingAfter
     }
 
     private static func textHeightAppKit(_ text: String, width: CGFloat, attributes: [NSAttributedString.Key: Any]) -> CGFloat {

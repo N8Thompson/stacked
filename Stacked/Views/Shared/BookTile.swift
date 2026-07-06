@@ -29,7 +29,7 @@ struct BookTile: View {
                         .lineLimit(1)
                 }
 
-                if let year = book.publishedYear {
+                if let year = book.publishedYearValue {
                     Text(String(year))
                         .font(.caption)
                         .foregroundStyle(.secondary)

@@ -34,14 +34,14 @@ struct StarRatingView: View {
             } label: {
                 Image(systemName: imageName)
                     .font(.title2)
-                    .foregroundStyle(rating > 0 ? Color.yellow : Color.secondary.opacity(0.35))
+                    .foregroundStyle(rating > 0 ? StackedTheme.Semantic.star : StackedTheme.Text.tertiary.opacity(0.5))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(star) star\(star == 1 ? "" : "s")")
         } else {
             Image(systemName: imageName)
                 .font(.title2)
-                .foregroundStyle(rating > 0 ? Color.yellow : Color.secondary.opacity(0.35))
+                .foregroundStyle(rating > 0 ? StackedTheme.Semantic.star : StackedTheme.Text.tertiary.opacity(0.5))
         }
     }
 

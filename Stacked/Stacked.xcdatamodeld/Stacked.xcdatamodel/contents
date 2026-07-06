@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="22758" systemVersion="23F79" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithCloudKit="YES" userDefinedModelVersionIdentifier="">
+    <entity name="Book" representedClassName="Book" syncable="YES">
+        <attribute name="addedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="addedByCloudRecordName" attributeType="String" defaultValueString=""/>
+        <attribute name="addedByDisplayName" attributeType="String" defaultValueString=""/>
+        <attribute name="authors" attributeType="String" defaultValueString=""/>
+        <attribute name="binding" attributeType="String" defaultValueString=""/>
+        <attribute name="copies" attributeType="Integer 32" defaultValueString="1" usesScalarValueType="YES"/>
+        <attribute name="coverOverride" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <attribute name="coverURL" attributeType="String" defaultValueString=""/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="idString" attributeType="String" defaultValueString=""/>
+        <attribute name="isManualEntry" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="isbn" attributeType="String" defaultValueString=""/>
+        <attribute name="listPrice" attributeType="Double" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="actualCost" optional="YES" attributeType="Double" usesScalarValueType="YES"/>
+        <attribute name="publishedYear" optional="YES" attributeType="Integer 32" usesScalarValueType="YES"/>
+        <attribute name="publisher" attributeType="String" defaultValueString=""/>
+        <attribute name="rating" attributeType="Double" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="reviewNotes" attributeType="String" defaultValueString=""/>
+        <attribute name="synopsis" attributeType="String" defaultValueString=""/>
+        <attribute name="title" attributeType="String" defaultValueString=""/>
+        <relationship name="bindingOption" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="ItemBinding" inverseName="books" inverseEntity="ItemBinding"/>
+        <relationship name="collection" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="BookCollection" inverseName="books" inverseEntity="BookCollection"/>
+        <relationship name="format" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="ItemFormat" inverseName="books" inverseEntity="ItemFormat"/>
+        <relationship name="location" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="StorageLocation" inverseName="books" inverseEntity="StorageLocation"/>
+    </entity>
+    <entity name="BookCollection" representedClassName="BookCollection" syncable="YES">
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="idString" attributeType="String" defaultValueString=""/>
+        <attribute name="isActive" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
+        <attribute name="name" attributeType="String" defaultValueString=""/>
+        <attribute name="ownerCloudRecordName" attributeType="String" defaultValueString=""/>
+        <attribute name="ownerDisplayName" attributeType="String" defaultValueString=""/>
+        <relationship name="books" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Book" inverseName="collection" inverseEntity="Book"/>
+        <relationship name="household" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Household" inverseName="collections" inverseEntity="Household"/>
+    </entity>
+    <entity name="Household" representedClassName="Household" syncable="YES">
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="idString" attributeType="String" defaultValueString=""/>
+        <attribute name="name" attributeType="String" defaultValueString=""/>
+        <attribute name="showCostTracking" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
+        <relationship name="bindings" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ItemBinding" inverseName="household" inverseEntity="ItemBinding"/>
+        <relationship name="collections" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="BookCollection" inverseName="household" inverseEntity="BookCollection"/>
+        <relationship name="formats" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ItemFormat" inverseName="household" inverseEntity="ItemFormat"/>
+        <relationship name="locations" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="StorageLocation" inverseName="household" inverseEntity="StorageLocation"/>
+    </entity>
+    <entity name="ItemBinding" representedClassName="ItemBinding" syncable="YES">
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="idString" attributeType="String" defaultValueString=""/>
+        <attribute name="isDefault" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="name" attributeType="String" defaultValueString=""/>
+        <relationship name="books" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Book" inverseName="bindingOption" inverseEntity="Book"/>
+        <relationship name="household" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Household" inverseName="bindings" inverseEntity="Household"/>
+    </entity>
+    <entity name="ItemFormat" representedClassName="ItemFormat" syncable="YES">
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="idString" attributeType="String" defaultValueString=""/>
+        <attribute name="isDefault" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="name" attributeType="String" defaultValueString=""/>
+        <relationship name="books" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Book" inverseName="format" inverseEntity="Book"/>
+        <relationship name="household" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Household" inverseName="formats" inverseEntity="Household"/>
+    </entity>
+    <entity name="StorageLocation" representedClassName="StorageLocation" syncable="YES">
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="idString" attributeType="String" defaultValueString=""/>
+        <attribute name="isDefault" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="name" attributeType="String" defaultValueString=""/>
+        <relationship name="books" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Book" inverseName="location" inverseEntity="Book"/>
+        <relationship name="household" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Household" inverseName="locations" inverseEntity="Household"/>
+    </entity>
+</model>

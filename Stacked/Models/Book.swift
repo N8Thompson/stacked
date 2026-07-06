@@ -2,109 +2,113 @@
 //  Book.swift
 //  Stacked
 //
-//  A catalog item, deduplicated by ISBN. Carries a single Location, a single
-//  Format, and a copies count. CloudKit requires defaults on every property
-//  and optional relationships, so uniqueness is enforced in-app rather than
-//  with @Attribute(.unique).
-//
 
+import CoreData
 import Foundation
-import SwiftData
+import SwiftUI
 
-@Model
-final class Book {
-    var isbn: String = ""
-    var title: String = ""
-    var authors: String = ""
-    var publisher: String = ""
-    var publishedYear: Int? = nil
-    /// Legacy free-text binding; migrated to bindingOption on launch and cleared.
-    var binding: String = ""
-    var synopsis: String = ""
-    /// Personal rating from 0 (unset) to 5 in half-star steps.
-    var rating: Double = 0
-    /// Personal notes about this item.
-    var reviewNotes: String = ""
+@objc(Book)
+public class Book: NSManagedObject, Identifiable {
+    @NSManaged public var idString: String
+    @NSManaged public var isbn: String
+    @NSManaged public var title: String
+    @NSManaged public var authors: String
+    @NSManaged public var publisher: String
+    @NSManaged public var publishedYear: NSNumber?
+    @NSManaged public var binding: String
+    @NSManaged public var synopsis: String
+    @NSManaged public var rating: Double
+    @NSManaged public var reviewNotes: String
+    @NSManaged public var coverURL: String
+    @NSManaged public var coverOverride: Data?
+    @NSManaged public var listPrice: Double
+    @NSManaged public var actualCost: NSNumber?
+    @NSManaged public var copies: Int32
+    @NSManaged public var createdAt: Date?
+    @NSManaged public var isManualEntry: Bool
+    @NSManaged public var addedAt: Date?
+    @NSManaged public var addedByCloudRecordName: String
+    @NSManaged public var addedByDisplayName: String
+    @NSManaged public var collection: BookCollection?
+    @NSManaged public var location: StorageLocation?
+    @NSManaged public var format: ItemFormat?
+    @NSManaged public var bindingOption: ItemBinding?
 
-    /// Remote cover image URL from the search provider.
-    var coverURL: String = ""
-    /// User-supplied cover image data that overrides the remote cover when set.
-    @Attribute(.externalStorage) var coverOverride: Data? = nil
-
-    /// Publisher list price / MSRP. Defaults to 0 when unknown.
-    var listPrice: Double = 0
-    /// Price the user actually paid. Takes precedence over listPrice when set.
-    var actualCost: Double? = nil
-
-    var copies: Int = 1
-    var createdAt: Date = Date()
-    /// Manual entries allow editing ISBN; catalog items from search do not.
-    var isManualEntry: Bool = false
-
-    @Relationship(deleteRule: .nullify) var location: StorageLocation? = nil
-    @Relationship(deleteRule: .nullify) var format: ItemFormat? = nil
-    @Relationship(deleteRule: .nullify) var bindingOption: ItemBinding? = nil
-
-    init(
-        isbn: String,
-        title: String,
-        authors: String = "",
-        publisher: String = "",
-        publishedYear: Int? = nil,
-        binding: String = "",
-        synopsis: String = "",
-        rating: Double = 0,
-        reviewNotes: String = "",
-        coverURL: String = "",
-        coverOverride: Data? = nil,
-        listPrice: Double = 0,
-        actualCost: Double? = nil,
-        copies: Int = 1,
-        createdAt: Date = Date(),
-        isManualEntry: Bool = false,
-        location: StorageLocation? = nil,
-        format: ItemFormat? = nil,
-        bindingOption: ItemBinding? = nil
-    ) {
-        self.isbn = isbn
-        self.title = title
-        self.authors = authors
-        self.publisher = publisher
-        self.publishedYear = publishedYear
-        self.binding = binding
-        self.synopsis = synopsis
-        self.rating = rating
-        self.reviewNotes = reviewNotes
-        self.coverURL = coverURL
-        self.coverOverride = coverOverride
-        self.listPrice = listPrice
-        self.actualCost = actualCost
-        self.copies = copies
-        self.createdAt = createdAt
-        self.isManualEntry = isManualEntry
-        self.location = location
-        self.format = format
-        self.bindingOption = bindingOption
+    @nonobjc public class func fetchRequest() -> NSFetchRequest<Book> {
+        NSFetchRequest<Book>(entityName: "Book")
     }
 
-    /// The per-copy value used for cost reporting: actualCost when provided,
-    /// otherwise the list price, otherwise zero.
+    public var id: UUID {
+        UUID(uuidString: idString) ?? UUID()
+    }
+
+    var publishedYearValue: Int? {
+        get { publishedYear?.intValue }
+        set { publishedYear = newValue.map { NSNumber(value: $0) } }
+    }
+
+    var actualCostValue: Double? {
+        get { actualCost?.doubleValue }
+        set { actualCost = newValue.map { NSNumber(value: $0) } }
+    }
+
     var effectiveUnitPrice: Double {
-        actualCost ?? listPrice
+        actualCostValue ?? listPrice
     }
 
-    /// Total value at list price for all copies.
     var totalListValue: Double {
         listPrice * Double(copies)
     }
 
-    /// Total value of all copies of this item (actual cost when set, otherwise list price).
     var totalValue: Double {
         effectiveUnitPrice * Double(copies)
     }
 }
 
-extension Collection where Element == Book {
+extension Book {
+    @MainActor
+    static func create(
+        in context: NSManagedObjectContext,
+        collection: BookCollection,
+        isbn: String,
+        title: String,
+        authors: String = "",
+        publisher: String = "",
+        publishedYear: Int? = nil,
+        synopsis: String = "",
+        coverURL: String = "",
+        listPrice: Double = 0,
+        actualCost: Double? = nil,
+        copies: Int = 1,
+        isManualEntry: Bool = false,
+        location: StorageLocation? = nil,
+        format: ItemFormat? = nil,
+        bindingOption: ItemBinding? = nil
+    ) -> Book {
+        let book = Book(context: context)
+        book.idString = UUID().uuidString
+        book.isbn = isbn
+        book.title = title
+        book.authors = authors
+        book.publisher = publisher
+        book.publishedYearValue = publishedYear
+        book.synopsis = synopsis
+        book.coverURL = coverURL
+        book.listPrice = listPrice
+        book.actualCostValue = actualCost
+        book.copies = Int32(copies)
+        book.createdAt = Date()
+        book.isManualEntry = isManualEntry
+        book.collection = collection
+        book.location = location
+        book.format = format
+        book.bindingOption = bindingOption
+        CloudKitIdentityService.shared.applyProvenance(to: book)
+        return book
+    }
+}
+
+extension Array where Element == Book {
     var totalEstimatedValue: Double {
         reduce(0) { $0 + $1.totalListValue }
     }
@@ -114,7 +118,7 @@ extension Collection where Element == Book {
     }
 
     var hasAnyActualCost: Bool {
-        contains { $0.actualCost != nil }
+        contains { $0.actualCostValue != nil }
     }
 }
 
@@ -124,5 +128,28 @@ enum BookFormValidation {
             && !authors.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && location != nil
             && format != nil
+    }
+}
+
+extension Book {
+    func stringBinding(_ keyPath: ReferenceWritableKeyPath<Book, String>) -> Binding<String> {
+        Binding(
+            get: { self[keyPath: keyPath] },
+            set: { self[keyPath: keyPath] = $0 }
+        )
+    }
+
+    var copiesBinding: Binding<Int> {
+        Binding(
+            get: { Int(self.copies) },
+            set: { self.copies = Int32($0) }
+        )
+    }
+
+    var ratingBinding: Binding<Double> {
+        Binding(
+            get: { self.rating },
+            set: { self.rating = $0 }
+        )
     }
 }

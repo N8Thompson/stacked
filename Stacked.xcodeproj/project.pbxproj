@@ -16,6 +16,22 @@
 			membershipExceptions = (
 				Info.plist,
 			);
+			platformFiltersByRelativePath = {
+				Views/iOS/AddBook/AddBookPresentation.swift = (ios, );
+				Views/iOS/AddBook/AddBookSheet.swift = (ios, );
+				Views/iOS/AddBook/ManualBookFormView.swift = (ios, );
+				Views/iOS/ExportShareSheet.swift = (ios, );
+				Views/iOS/Home/HomeView.swift = (ios, );
+				Views/iOS/RootView.swift = (ios, );
+				Views/iOS/Settings/SettingsView.swift = (ios, );
+				Views/macOS/AddBook/AddBookPresentation.swift = (macos, );
+				Views/macOS/AddBook/AddBookSheet.swift = (macos, );
+				Views/macOS/AddBook/ManualBookFormView.swift = (macos, );
+				Views/macOS/ExportShareSheet.swift = (macos, );
+				Views/macOS/Home/HomeView.swift = (macos, );
+				Views/macOS/RootView.swift = (macos, );
+				Views/macOS/Settings/SettingsView.swift = (macos, );
+			};
 			target = 6F4899A72FF8B50400FB3CF2 /* Stacked */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
