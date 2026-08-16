@@ -14,6 +14,7 @@ struct PaywallView: View {
 
     @State private var selectedTier: PaywallTier = .plus
     @State private var selectedPeriod: PlusPeriod = .annual
+    @State private var showRedeemCode = false
 
     private enum PaywallTier {
         case plus
@@ -63,12 +64,17 @@ struct PaywallView: View {
         .task {
             await subscriptions.load()
             if subscriptions.isPlus { dismiss() }
-            if annualProduct == nil, monthlyProduct != nil {
-                selectedPeriod = .monthly
-            }
         }
         .onChange(of: subscriptions.isPlus) { _, entitled in
             if entitled { dismiss() }
+        }
+        .sheet(isPresented: $showRedeemCode) {
+            NavigationStack {
+                RedeemPlusCodeView()
+            }
+            #if os(macOS)
+            .frame(minWidth: 360, minHeight: 280)
+            #endif
         }
     }
 
@@ -130,22 +136,41 @@ struct PaywallView: View {
     }
 
     private var benefits: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            benefit("Unlimited titles and locations")
-            benefit("Bluetooth rapid scanner")
-            benefit("Cost tracking")
-            benefit("Share a collection with other users")
+        VStack(alignment: .leading, spacing: 16) {
+            benefit(
+                title: "Unlimited titles & locations",
+                description: "Build your collection without limits."
+            )
+            benefit(
+                title: "Bluetooth rapid scanning",
+                description: "Add items faster with a Bluetooth barcode scanner."
+            )
+            benefit(
+                title: "Cost tracking",
+                description: "Track and manage the value of your collection."
+            )
+            benefit(
+                title: "Collection sharing",
+                description: "Invite others to help manage your collection."
+            )
         }
     }
 
-    private func benefit(_ text: String) -> some View {
-        HStack(spacing: 12) {
+    private func benefit(title: String, description: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 20))
                 .foregroundStyle(StackedTheme.Brand.sageLight)
-            Text(text)
-                .font(.body.weight(.medium))
-                .foregroundStyle(StackedTheme.Brand.cream)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(StackedTheme.Brand.cream)
+                Text(description)
+                    .font(.subheadline)
+                    .foregroundStyle(StackedTheme.Brand.cream.opacity(0.62))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -174,33 +199,25 @@ struct PaywallView: View {
             }
             .buttonStyle(.plain)
 
-            if selected {
-                VStack(spacing: 8) {
-                    periodRow(
-                        title: "Yearly",
-                        price: annualPriceLabel,
-                        badge: annualDiscountBadge,
-                        selected: selectedPeriod == .annual,
-                        enabled: annualProduct != nil || subscriptions.products.isEmpty
-                    ) {
-                        selectedTier = .plus
-                        selectedPeriod = .annual
-                    }
-                    periodRow(
-                        title: "Monthly",
-                        price: monthlyPriceLabel,
-                        badge: nil,
-                        selected: selectedPeriod == .monthly,
-                        enabled: monthlyProduct != nil || subscriptions.products.isEmpty
-                    ) {
-                        selectedTier = .plus
-                        selectedPeriod = .monthly
-                    }
+            VStack(spacing: 8) {
+                periodRow(
+                    title: "Yearly",
+                    price: annualPriceLabel,
+                    badge: annualDiscountBadge,
+                    selected: selected && selectedPeriod == .annual
+                ) {
+                    selectedTier = .plus
+                    selectedPeriod = .annual
                 }
-            } else {
-                Text(plusSummary)
-                    .font(.footnote)
-                    .foregroundStyle(StackedTheme.Brand.cream.opacity(0.6))
+                periodRow(
+                    title: "Monthly",
+                    price: monthlyPriceLabel,
+                    badge: nil,
+                    selected: selected && selectedPeriod == .monthly
+                ) {
+                    selectedTier = .plus
+                    selectedPeriod = .monthly
+                }
             }
         }
         .padding(16)
@@ -274,7 +291,6 @@ struct PaywallView: View {
         price: String,
         badge: String?,
         selected: Bool,
-        enabled: Bool,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
@@ -323,8 +339,6 @@ struct PaywallView: View {
             )
         }
         .buttonStyle(.plain)
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.45)
     }
 
     private var disclaimer: some View {
@@ -361,17 +375,25 @@ struct PaywallView: View {
     }
 
     private var legalLinks: some View {
-        HStack(spacing: 0) {
-            Button("Restore Purchase") {
-                Task { await subscriptions.restore() }
+        VStack(spacing: 12) {
+            Button("Have a code?") {
+                showRedeemCode = true
             }
-            Spacer()
-            Link("Privacy Policy", destination: EntitlementPolicy.privacyURL)
-            Spacer()
-            Link("Terms of Use", destination: EntitlementPolicy.termsURL)
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(StackedTheme.Brand.cream.opacity(0.8))
+
+            HStack(spacing: 0) {
+                Button("Restore Purchase") {
+                    Task { await subscriptions.restore() }
+                }
+                Spacer()
+                Link("Privacy Policy", destination: EntitlementPolicy.privacyURL)
+                Spacer()
+                Link("Terms of Use", destination: EntitlementPolicy.termsURL)
+            }
+            .font(.footnote)
+            .foregroundStyle(StackedTheme.Brand.cream.opacity(0.55))
         }
-        .font(.footnote)
-        .foregroundStyle(StackedTheme.Brand.cream.opacity(0.55))
         .padding(.top, 4)
     }
 
@@ -410,10 +432,6 @@ struct PaywallView: View {
         let yearOfMonthly = monthly * 12
         guard yearOfMonthly > annual, yearOfMonthly > 0 else { return nil }
         return max(1, Int((1 - annual / yearOfMonthly) * 100))
-    }
-
-    private var plusSummary: String {
-        "\(annualPriceLabel) or \(monthlyPriceLabel)"
     }
 
     private var disclaimerText: String {

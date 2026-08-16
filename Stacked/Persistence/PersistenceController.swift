@@ -2,7 +2,7 @@
 //  PersistenceController.swift
 //  Stacked
 //
-//  Reloadable Core Data stack. iOS can run in iCloud or local-only mode
+//  Reloadable Core Data stack. iOS and Mac can run in iCloud or local-only mode
 //  using separate SQLite files so CloudKit is never toggled on the same store.
 //
 
@@ -27,11 +27,7 @@ final class PersistenceController: ObservableObject {
     var viewContext: NSManagedObjectContext { container.viewContext }
 
     var usesCloudKit: Bool {
-        #if os(iOS)
-        return !inMemory && mode == .iCloud
-        #else
-        return false
-        #endif
+        !inMemory && mode == .iCloud
     }
 
     init(inMemory: Bool = false, mode: PersistenceMode = PersistenceMode.current) {
@@ -63,34 +59,26 @@ final class PersistenceController: ObservableObject {
             expectedStoreCount = 1
             privateDescription.url = URL(fileURLWithPath: "/dev/null")
             privateDescription.cloudKitContainerOptions = nil
-        } else {
-            #if os(iOS)
-            if mode == .iCloud {
-                expectedStoreCount = 2
-                privateDescription.url = Self.cloudPrivateStoreURL
-                privateDescription.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
-                    containerIdentifier: Self.cloudKitContainerID
-                )
+        } else if mode == .iCloud {
+            expectedStoreCount = 2
+            privateDescription.url = Self.cloudPrivateStoreURL
+            privateDescription.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
+                containerIdentifier: Self.cloudKitContainerID
+            )
 
-                let sharedDescription = privateDescription.copy() as! NSPersistentStoreDescription
-                sharedDescription.url = Self.sharedStoreURL
-                sharedDescription.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
-                    containerIdentifier: Self.cloudKitContainerID
-                )
-                sharedDescription.cloudKitContainerOptions?.databaseScope = .shared
-                sharedDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
-                sharedDescription.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
-                container.persistentStoreDescriptions.append(sharedDescription)
-            } else {
-                expectedStoreCount = 1
-                privateDescription.url = Self.localStoreURL
-                privateDescription.cloudKitContainerOptions = nil
-            }
-            #else
+            let sharedDescription = privateDescription.copy() as! NSPersistentStoreDescription
+            sharedDescription.url = Self.sharedStoreURL
+            sharedDescription.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(
+                containerIdentifier: Self.cloudKitContainerID
+            )
+            sharedDescription.cloudKitContainerOptions?.databaseScope = .shared
+            sharedDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+            sharedDescription.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+            container.persistentStoreDescriptions.append(sharedDescription)
+        } else {
             expectedStoreCount = 1
-            privateDescription.url = Self.macStoreURL
+            privateDescription.url = Self.localStoreURL
             privateDescription.cloudKitContainerOptions = nil
-            #endif
         }
 
         privateDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
@@ -135,7 +123,6 @@ final class PersistenceController: ObservableObject {
         }
     }
 
-    #if os(iOS)
     /// Waits for CloudKit to import an existing library before local first-run seeding.
     func waitForInitialCloudKitImport(maxWait: Duration = .seconds(12)) async {
         guard usesCloudKit else { return }
@@ -143,12 +130,11 @@ final class PersistenceController: ObservableObject {
         let deadline = clock.now.advanced(by: maxWait)
 
         while clock.now < deadline {
-            let count = (try? viewContext.count(for: Household.fetchRequest())) ?? 0
+            let count = (try? viewContext.count(for: Org.fetchRequest())) ?? 0
             if count > 0 { return }
             try? await Task.sleep(for: .milliseconds(250))
         }
     }
-    #endif
 
     static var cloudPrivateStoreURL: URL {
         NSPersistentContainer.defaultDirectoryURL().appendingPathComponent("StackedPrivate.sqlite")
@@ -156,10 +142,6 @@ final class PersistenceController: ObservableObject {
 
     static var localStoreURL: URL {
         NSPersistentContainer.defaultDirectoryURL().appendingPathComponent("StackedLocal.sqlite")
-    }
-
-    static var macStoreURL: URL {
-        NSPersistentContainer.defaultDirectoryURL().appendingPathComponent("StackedMac.sqlite")
     }
 
     static var sharedStoreURL: URL {

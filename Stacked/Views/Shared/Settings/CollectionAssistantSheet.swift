@@ -12,8 +12,8 @@ import UniformTypeIdentifiers
 struct CollectionAssistantSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var context
-    @Environment(HouseholdManager.self) private var householdManager
-    @Environment(HouseholdSharingService.self) private var sharingService
+    @Environment(OrgManager.self) private var orgManager
+    @Environment(OrgSharingService.self) private var sharingService
     @Environment(SubscriptionService.self) private var subscriptions
 
     @State private var step: Step
@@ -24,7 +24,7 @@ struct CollectionAssistantSheet: View {
     @State private var isOpeningUserManagement = false
     @State private var showPaywall = false
 
-    private var household: Household? { householdManager.activeHousehold }
+    private var org: Org? { orgManager.activeOrg }
 
     enum Step {
         case choose
@@ -96,12 +96,6 @@ struct CollectionAssistantSheet: View {
 
     private var chooseStep: some View {
         List {
-            Section {
-                Text("Hi, I'm Dewey. I'll help you share, copy, or take your collection with you.")
-                    .font(.subheadline)
-                    .foregroundStyle(StackedTheme.Text.secondary)
-            }
-
             Section("Are you looking to…") {
                 #if os(iOS)
                 Button {
@@ -194,13 +188,13 @@ struct CollectionAssistantSheet: View {
 
     #if os(iOS)
     private func openUserManagement() async {
-        guard !isOpeningUserManagement, let household else { return }
+        guard !isOpeningUserManagement, let org else { return }
         isOpeningUserManagement = true
         defer { isOpeningUserManagement = false }
 
         do {
             let presented = try await sharingService.presentUserManagement(
-                for: household,
+                for: org,
                 isPlus: subscriptions.isPlus
             )
             if !presented {
@@ -213,9 +207,9 @@ struct CollectionAssistantSheet: View {
     #endif
 
     private func exportStackedBackup() {
-        guard let household else { return }
+        guard let org else { return }
         do {
-            let url = try LibraryMigrationService.exportHousehold(household, context: context)
+            let url = try LibraryMigrationService.exportOrg(org, context: context)
             preparedShare = PreparedShareItem(url: url)
         } catch {
             errorMessage = error.localizedDescription
@@ -223,9 +217,9 @@ struct CollectionAssistantSheet: View {
     }
 
     private func exportCSV() {
-        guard let household else { return }
+        guard let org else { return }
         do {
-            let url = try LibraryMigrationService.portableCSVURL(household, context: context)
+            let url = try LibraryMigrationService.portableCSVURL(org, context: context)
             preparedShare = PreparedShareItem(url: url)
         } catch {
             errorMessage = error.localizedDescription
@@ -252,9 +246,9 @@ struct CollectionAssistantSheet: View {
     }
 
     private func applyImport(_ preview: MigrationPreview) {
-        guard let household else { return }
+        guard let org else { return }
         do {
-            try LibraryMigrationService.applyImport(preview, into: household, context: context)
+            try LibraryMigrationService.applyImport(preview, into: org, context: context)
             migrationPreview = nil
         } catch {
             errorMessage = error.localizedDescription

@@ -14,7 +14,7 @@ struct AddBookSheet: View {
 
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
-    @Environment(HouseholdManager.self) private var householdManager
+    @Environment(OrgManager.self) private var orgManager
     @Environment(SubscriptionService.self) private var subscriptions
 
     @FocusState private var searchFieldFocused: Bool
@@ -26,9 +26,9 @@ struct AddBookSheet: View {
         _actions = State(initialValue: AddBookActions(preselection: preselection))
     }
 
-    private var books: [Book] { householdManager.allBooks(in: context) }
-    private var locations: [StorageLocation] { householdManager.locations }
-    private var formats: [ItemFormat] { householdManager.formats }
+    private var books: [Book] { orgManager.allBooks(in: context) }
+    private var locations: [StorageLocation] { orgManager.locations }
+    private var formats: [ItemFormat] { orgManager.formats }
     private var provider: BookSearchProvider { BookSearchProviderFactory.make() }
 
     var body: some View {
@@ -269,7 +269,7 @@ struct AddBookSheet: View {
                             books: books,
                             locations: locations,
                             formats: formats,
-                            householdManager: householdManager,
+                            orgManager: orgManager,
                             context: context,
                             isPlus: subscriptions.isPlus
                         )

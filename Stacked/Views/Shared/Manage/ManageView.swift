@@ -10,7 +10,7 @@ import SwiftUI
 
 struct ManageView: View {
     @Environment(AppRouter.self) private var router
-    @Environment(HouseholdManager.self) private var householdManager
+    @Environment(OrgManager.self) private var orgManager
     @Environment(\.managedObjectContext) private var context
 
     @State private var searchText = ""
@@ -21,9 +21,9 @@ struct ManageView: View {
 
     private let pageSize = 20
 
-    private var books: [Book] { householdManager.allBooks(in: context) }
-    private var locations: [StorageLocation] { householdManager.locations }
-    private var formats: [ItemFormat] { householdManager.formats }
+    private var books: [Book] { orgManager.allBooks(in: context) }
+    private var locations: [StorageLocation] { orgManager.locations }
+    private var formats: [ItemFormat] { orgManager.formats }
 
     var body: some View {
         NavigationStack {

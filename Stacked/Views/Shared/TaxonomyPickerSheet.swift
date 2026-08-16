@@ -44,7 +44,7 @@ struct TaxonomyPickerView: View {
     @Binding var selectedFormat: ItemFormat?
     @Binding var selectedBinding: ItemBinding?
 
-    @Environment(HouseholdManager.self) private var householdManager
+    @Environment(OrgManager.self) private var orgManager
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(SubscriptionService.self) private var subscriptions
@@ -52,9 +52,9 @@ struct TaxonomyPickerView: View {
     @State private var addEditor: NameEditorTarget?
     @State private var showPaywall = false
 
-    private var locations: [StorageLocation] { householdManager.locations }
-    private var formats: [ItemFormat] { householdManager.formats }
-    private var bindings: [ItemBinding] { householdManager.bindings }
+    private var locations: [StorageLocation] { orgManager.locations }
+    private var formats: [ItemFormat] { orgManager.formats }
+    private var bindings: [ItemBinding] { orgManager.bindings }
 
     var body: some View {
         listContent
@@ -126,22 +126,22 @@ struct TaxonomyPickerView: View {
 
     @MainActor
     private func insertAndSelect(name: String) {
-        guard let household = householdManager.activeHousehold else { return }
+        guard let org = orgManager.activeOrg else { return }
         switch kind {
         case .location:
-            if let location = TaxonomyService.findOrCreateLocation(name: name, household: household, in: context) {
+            if let location = TaxonomyService.findOrCreateLocation(name: name, org: org, in: context) {
                 selectedLocation = location
                 PersistenceController.shared.save()
                 dismiss()
             }
         case .format:
-            if let format = TaxonomyService.findOrCreateFormat(name: name, household: household, in: context) {
+            if let format = TaxonomyService.findOrCreateFormat(name: name, org: org, in: context) {
                 selectedFormat = format
                 PersistenceController.shared.save()
                 dismiss()
             }
         case .binding:
-            if let binding = TaxonomyService.findOrCreateBinding(name: name, household: household, in: context) {
+            if let binding = TaxonomyService.findOrCreateBinding(name: name, org: org, in: context) {
                 selectedBinding = binding
                 PersistenceController.shared.save()
                 dismiss()

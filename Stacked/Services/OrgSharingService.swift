@@ -1,5 +1,5 @@
 //
-//  HouseholdSharingService.swift
+//  OrgSharingService.swift
 //  Stacked
 //
 
@@ -8,15 +8,17 @@ import CoreData
 import SwiftUI
 #if os(iOS)
 import UIKit
+#elseif os(macOS)
+import AppKit
 #endif
 
-enum HouseholdRole: String {
+enum OrgRole: String {
     case owner
     case participant
     case localOnly
 }
 
-struct HouseholdMember: Identifiable, Hashable {
+struct OrgMember: Identifiable, Hashable {
     let id: String
     let userRecordName: String?
     let displayName: String
@@ -29,8 +31,8 @@ struct HouseholdMember: Identifiable, Hashable {
 
 @MainActor
 @Observable
-final class HouseholdSharingService {
-    static let shared = HouseholdSharingService()
+final class OrgSharingService {
+    static let shared = OrgSharingService()
 
     private let persistence = PersistenceController.shared
     private var container: CKContainer {
@@ -38,47 +40,41 @@ final class HouseholdSharingService {
     }
 
     var pendingMergeAfterJoin = false
-    var currentRole: HouseholdRole = .localOnly
+    var currentRole: OrgRole = .localOnly
     var lastSharingError: String?
-    #if os(iOS)
-    private var cloudSharingSession: HouseholdCloudSharingSession?
-    #endif
+    private var cloudSharingSession: OrgCloudSharingSession?
 
-    func refreshRole(for household: Household?) async {
-        #if os(iOS)
-        let resolved: HouseholdRole
-        guard persistence.usesCloudKit, let household else {
+    func refreshRole(for org: Org?) async {
+        let resolved: OrgRole
+        guard persistence.usesCloudKit, let org else {
             resolved = persistence.usesCloudKit ? .owner : .localOnly
             assignRole(resolved)
             return
         }
-        if HouseholdManager.shared.isSharedHousehold(household, in: persistence.viewContext) {
-            resolved = (await isOwner(of: household)) ? .owner : .participant
+        if OrgManager.shared.isSharedOrg(org, in: persistence.viewContext) {
+            resolved = (await isOwner(of: org)) ? .owner : .participant
         } else {
             resolved = .owner
         }
         assignRole(resolved)
-        #else
-        assignRole(.localOnly)
-        #endif
     }
 
-    private func assignRole(_ role: HouseholdRole) {
+    private func assignRole(_ role: OrgRole) {
         if currentRole != role {
             currentRole = role
         }
     }
 
-    func fetchOrCreateShare(for household: Household) async throws -> CKShare {
-        if let existing = await fetchShare(for: household) {
+    func fetchOrCreateShare(for org: Org) async throws -> CKShare {
+        if let existing = await fetchShare(for: org) {
             return existing
         }
-        return try await createShare(for: household)
+        return try await createShare(for: org)
     }
 
-    func createShare(for household: Household) async throws -> CKShare {
+    func createShare(for org: Org) async throws -> CKShare {
         try await withCheckedThrowingContinuation { continuation in
-            persistence.container.share([household], to: nil) { _, share, _, error in
+            persistence.container.share([org], to: nil) { _, share, _, error in
                 if let error {
                     continuation.resume(throwing: error)
                     return
@@ -98,25 +94,24 @@ final class HouseholdSharingService {
         guard let sharedStore = persistence.sharedStore else { return }
         do {
             try await persistence.container.acceptShareInvitations(from: [metadata], into: sharedStore)
-            HouseholdManager.shared.refresh(in: persistence.viewContext)
-            pendingMergeAfterJoin = HouseholdManager.shared.privateBookCount(in: persistence.viewContext) > 0
-            await refreshRole(for: HouseholdManager.shared.activeHousehold)
+            OrgManager.shared.refresh(in: persistence.viewContext)
+            pendingMergeAfterJoin = OrgManager.shared.privateBookCount(in: persistence.viewContext) > 0
+            await refreshRole(for: OrgManager.shared.activeOrg)
         } catch {
             lastSharingError = error.localizedDescription
         }
     }
 
-    func isOwner(of household: Household) async -> Bool {
-        guard let share = await fetchShare(for: household) else { return true }
+    func isOwner(of org: Org) async -> Bool {
+        guard let share = await fetchShare(for: org) else { return true }
         let ownerID = share.owner.userIdentity.userRecordID?.recordName
         let current = CloudKitIdentityService.shared.recordName
         return ownerID == current || ownerID == nil
     }
 
-    #if os(iOS)
-    func presentUserManagement(for household: Household, isPlus: Bool) async throws -> Bool {
-        let existingShare = await fetchShare(for: household)
-        guard HouseholdSharePolicy.canCreateShare(
+    func presentUserManagement(for org: Org, isPlus: Bool) async throws -> Bool {
+        let existingShare = await fetchShare(for: org)
+        guard OrgSharePolicy.canCreateShare(
             isPlus: isPlus,
             hasExistingShare: existingShare != nil
         ) else {
@@ -127,9 +122,9 @@ final class HouseholdSharingService {
         if let existingShare {
             share = existingShare
         } else {
-            share = try await createShare(for: household)
+            share = try await createShare(for: org)
         }
-        let session = HouseholdCloudSharingSession { [weak self] in
+        let session = OrgCloudSharingSession { [weak self] in
             self?.cloudSharingSession = nil
         }
         cloudSharingSession = session
@@ -140,28 +135,27 @@ final class HouseholdSharingService {
         return true
     }
 
-    func leaveSharedHousehold(_ household: Household) async throws {
+    func leaveSharedOrg(_ org: Org) async throws {
         lastSharingError = nil
         guard let sharedStore = persistence.sharedStore else { return }
-        guard HouseholdManager.shared.isSharedHousehold(household, in: persistence.viewContext) else { return }
-        guard let share = await fetchShare(for: household) else { return }
+        guard OrgManager.shared.isSharedOrg(org, in: persistence.viewContext) else { return }
+        guard let share = await fetchShare(for: org) else { return }
         do {
             try await persistence.container.purgeObjectsAndRecordsInZone(with: share.recordID.zoneID, in: sharedStore)
-            HouseholdManager.shared.refresh(in: persistence.viewContext)
-            await refreshRole(for: HouseholdManager.shared.activeHousehold)
+            OrgManager.shared.refresh(in: persistence.viewContext)
+            await refreshRole(for: OrgManager.shared.activeOrg)
         } catch {
             lastSharingError = error.localizedDescription
             throw error
         }
     }
-    #endif
 
-    func fetchShare(for household: Household) async -> CKShare? {
-        let shares = try? persistence.container.fetchShares(matching: [household.objectID])
-        return shares?[household.objectID]
+    func fetchShare(for org: Org) async -> CKShare? {
+        let shares = try? persistence.container.fetchShares(matching: [org.objectID])
+        return shares?[org.objectID]
     }
 
-    func members(from share: CKShare) -> [HouseholdMember] {
+    func members(from share: CKShare) -> [OrgMember] {
         let current = CloudKitIdentityService.shared.recordName
         let currentParticipantID = share.currentUserParticipant.map(participantID)
         return share.participants
@@ -178,8 +172,7 @@ final class HouseholdSharingService {
             }
     }
 
-    #if os(iOS)
-    func setLinkSharing(enabled: Bool, share: CKShare, household: Household) async throws -> CKShare {
+    func setLinkSharing(enabled: Bool, share: CKShare, org: Org) async throws -> CKShare {
         let updated = share
         if enabled {
             updated.publicPermission = .readWrite
@@ -190,33 +183,32 @@ final class HouseholdSharingService {
             }
             updated.publicPermission = .none
         }
-        return try await persist(updated, household: household)
+        return try await persist(updated, org: org)
     }
 
-    func removeMember(_ member: HouseholdMember, from share: CKShare, household: Household) async throws -> CKShare {
+    func removeMember(_ member: OrgMember, from share: CKShare, org: Org) async throws -> CKShare {
         guard let participant = share.participants.first(where: {
             participantID($0) == member.id
         }) else { return share }
         guard participant.role != .owner else { return share }
         share.removeParticipant(participant)
-        return try await persist(share, household: household)
+        return try await persist(share, org: org)
     }
 
-    private func persist(_ share: CKShare, household: Household) async throws -> CKShare {
-        let store = HouseholdManager.shared.store(for: household, in: persistence.viewContext)
+    private func persist(_ share: CKShare, org: Org) async throws -> CKShare {
+        let store = OrgManager.shared.store(for: org, in: persistence.viewContext)
             ?? persistence.privateStore
         guard let store else {
             throw BookSearchError.transport("Couldn't update collection access.")
         }
         return try await persistence.container.persistUpdatedShare(share, in: store)
     }
-    #endif
 
     private func member(
         from participant: CKShare.Participant,
         currentRecordName: String?,
         currentParticipantID: String?
-    ) -> HouseholdMember {
+    ) -> OrgMember {
         let recordName = participant.userIdentity.userRecordID?.recordName
         let joinedViaLink = participant.role == .publicUser
         let isOwner = participant.role == .owner
@@ -236,7 +228,7 @@ final class HouseholdSharingService {
         } else {
             subtitle = joinedViaLink ? "Joined via share link" : "Invited directly"
         }
-        return HouseholdMember(
+        return OrgMember(
             id: id,
             userRecordName: recordName,
             displayName: name == "Owner" && isCurrentUser ? "You" : name,
@@ -272,7 +264,7 @@ final class HouseholdSharingService {
 
 #if os(iOS)
 @MainActor
-final class HouseholdCloudSharingSession: NSObject, UICloudSharingControllerDelegate {
+final class OrgCloudSharingSession: NSObject, UICloudSharingControllerDelegate {
     private let onFinished: () -> Void
 
     init(onFinished: @escaping () -> Void) {
@@ -288,7 +280,7 @@ final class HouseholdCloudSharingSession: NSObject, UICloudSharingControllerDele
     }
 
     func cloudSharingController(_ csc: UICloudSharingController, failedToSaveShareWithError error: Error) {
-        HouseholdSharingService.shared.lastSharingError = error.localizedDescription
+        OrgSharingService.shared.lastSharingError = error.localizedDescription
         onFinished()
     }
 
@@ -321,6 +313,39 @@ final class HouseholdCloudSharingSession: NSObject, UICloudSharingControllerDele
             return tabs.selectedViewController ?? tabs
         }
         return controller
+    }
+}
+#elseif os(macOS)
+@MainActor
+final class OrgCloudSharingSession: NSObject {
+    private let onFinished: () -> Void
+    private var picker: NSSharingServicePicker?
+
+    init(onFinished: @escaping () -> Void) {
+        self.onFinished = onFinished
+    }
+
+    func present(share: CKShare, container: CKContainer) {
+        let itemProvider = NSItemProvider()
+        itemProvider.registerCKShare(
+            share,
+            container: container,
+            allowedSharingOptions: .standard
+        )
+
+        guard let view = NSApp.keyWindow?.contentView else {
+            onFinished()
+            return
+        }
+        let picker = NSSharingServicePicker(items: [itemProvider])
+        self.picker = picker
+        let rect = NSRect(
+            x: view.bounds.midX - 1,
+            y: view.bounds.midY - 1,
+            width: 2,
+            height: 2
+        )
+        picker.show(relativeTo: rect, of: view, preferredEdge: .minY)
     }
 }
 #endif

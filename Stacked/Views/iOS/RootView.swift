@@ -10,8 +10,8 @@ import SwiftUI
 #if os(iOS)
 struct RootView: View {
     @Environment(AppRouter.self) private var router
-    @Environment(HouseholdSharingService.self) private var sharingService
-    @Environment(HouseholdManager.self) private var householdManager
+    @Environment(OrgSharingService.self) private var sharingService
+    @Environment(OrgManager.self) private var orgManager
     @Environment(\.managedObjectContext) private var context
 
     @State private var showMergeOnJoin = false
@@ -26,12 +26,12 @@ struct RootView: View {
             }
         }
         .onChange(of: sharingService.pendingMergeAfterJoin) { _, pending in
-            if pending, householdManager.privateBookCount(in: context) > 0 {
+            if pending, orgManager.privateBookCount(in: context) > 0 {
                 showMergeOnJoin = true
             }
         }
         .sheet(isPresented: $showMergeOnJoin) {
-            MergeOnJoinSheet(bookCount: householdManager.privateBookCount(in: context))
+            MergeOnJoinSheet(bookCount: orgManager.privateBookCount(in: context))
         }
     }
 

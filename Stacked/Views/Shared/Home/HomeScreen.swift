@@ -11,12 +11,12 @@ struct HomeScreen<Banner: View>: View {
     @ViewBuilder var banner: () -> Banner
 
     @Environment(AppRouter.self) private var router
-    @Environment(HouseholdManager.self) private var householdManager
+    @Environment(OrgManager.self) private var orgManager
     @Environment(\.managedObjectContext) private var context
 
-    private var books: [Book] { householdManager.allBooks(in: context) }
-    private var locations: [StorageLocation] { householdManager.locations }
-    private var formats: [ItemFormat] { householdManager.formats }
+    private var books: [Book] { orgManager.allBooks(in: context) }
+    private var locations: [StorageLocation] { orgManager.locations }
+    private var formats: [ItemFormat] { orgManager.formats }
 
     var body: some View {
         ScrollView {
@@ -155,10 +155,10 @@ struct CollectionSummaryStats: View {
     var style: Style = .inline
 
     @Environment(AppSettings.self) private var appSettings
-    @Environment(HouseholdManager.self) private var householdManager
+    @Environment(OrgManager.self) private var orgManager
     @Environment(\.managedObjectContext) private var context
 
-    private var books: [Book] { householdManager.allBooks(in: context) }
+    private var books: [Book] { orgManager.allBooks(in: context) }
 
     var body: some View {
         let totalCopies = books.reduce(0) { $0 + Int($1.copies) }

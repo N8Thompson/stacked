@@ -35,7 +35,7 @@ enum PersistenceSwitchPolicy {
 
     static func disconnectKind(
         mode: PersistenceMode,
-        role: HouseholdRole,
+        role: OrgRole,
         usesCloudKit: Bool
     ) -> DisconnectKind {
         guard usesCloudKit || mode == .local else { return .notAvailable }
@@ -56,7 +56,7 @@ enum SubscriptionState: Equatable {
     }
 }
 
-enum HouseholdSharePolicy {
+enum OrgSharePolicy {
     static func canCreateShare(isPlus: Bool, hasExistingShare: Bool) -> Bool {
         isPlus || hasExistingShare
     }

@@ -8,7 +8,7 @@ import SwiftUI
 #if os(iOS)
 struct SettingsView: View {
     @Environment(\.managedObjectContext) private var context
-    @Environment(HouseholdManager.self) private var householdManager
+    @Environment(OrgManager.self) private var orgManager
 
     @State private var editor: NameEditorTarget?
     @State private var deleteRequest: TaxonomyDeleteRequest?
@@ -35,18 +35,18 @@ struct SettingsView: View {
         .sheet(item: $deleteRequest) { request in
             TaxonomyDeleteSheet(
                 request: request,
-                locations: householdManager.locations,
-                formats: householdManager.formats,
-                bindings: householdManager.bindings,
+                locations: orgManager.locations,
+                formats: orgManager.formats,
+                bindings: orgManager.bindings,
                 onDelete: { request, location, format, binding in
                     TaxonomyService.performDelete(
                         request,
                         replacementLocation: location,
                         replacementFormat: format,
                         replacementBinding: binding,
-                        locations: householdManager.locations,
-                        formats: householdManager.formats,
-                        bindings: householdManager.bindings,
+                        locations: orgManager.locations,
+                        formats: orgManager.formats,
+                        bindings: orgManager.bindings,
                         in: context
                     )
                 }

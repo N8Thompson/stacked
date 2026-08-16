@@ -10,8 +10,8 @@ import CoreData
 
 struct MergeOnJoinSheet: View {
     @Environment(\.managedObjectContext) private var context
-    @Environment(HouseholdManager.self) private var householdManager
-    @Environment(HouseholdSharingService.self) private var sharingService
+    @Environment(OrgManager.self) private var orgManager
+    @Environment(OrgSharingService.self) private var sharingService
     @Environment(\.dismiss) private var dismiss
 
     let bookCount: Int
@@ -28,7 +28,7 @@ struct MergeOnJoinSheet: View {
 
                 VStack(spacing: 12) {
                     Button {
-                        mergeIntoHousehold()
+                        mergeIntoOrg()
                     } label: {
                         Text("Add my books to shared collection")
                             .frame(maxWidth: .infinity)
@@ -59,16 +59,16 @@ struct MergeOnJoinSheet: View {
         .presentationDetents([.medium, .large])
     }
 
-    private func mergeIntoHousehold() {
-        guard let household = householdManager.activeHousehold,
-              let source = householdManager.privateLibraryCollection(in: context) else {
+    private func mergeIntoOrg() {
+        guard let org = orgManager.activeOrg,
+              let source = orgManager.privateLibraryCollection(in: context) else {
             sharingService.pendingMergeAfterJoin = false
             dismiss()
             return
         }
-        try? CollectionMergeService.mergePrivateIntoHousehold(
+        try? CollectionMergeService.mergePrivateIntoOrg(
             source: source,
-            targetHousehold: household,
+            targetOrg: org,
             in: context
         )
         sharingService.pendingMergeAfterJoin = false

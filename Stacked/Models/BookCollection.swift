@@ -14,7 +14,7 @@ public class BookCollection: NSManagedObject, Identifiable {
     @NSManaged public var ownerCloudRecordName: String
     @NSManaged public var createdAt: Date?
     @NSManaged public var isActive: Bool
-    @NSManaged public var household: Household?
+    @NSManaged public var org: Org?
     @NSManaged public var books: NSSet?
 
     @nonobjc public class func fetchRequest() -> NSFetchRequest<BookCollection> {
@@ -27,7 +27,7 @@ public class BookCollection: NSManagedObject, Identifiable {
 
     static func create(
         in context: NSManagedObjectContext,
-        household: Household,
+        org: Org,
         name: String,
         ownerDisplayName: String,
         ownerCloudRecordName: String
@@ -35,7 +35,7 @@ public class BookCollection: NSManagedObject, Identifiable {
         let collection = BookCollection(context: context)
         collection.idString = UUID().uuidString
         collection.name = name
-        collection.household = household
+        collection.org = org
         collection.ownerDisplayName = ownerDisplayName
         collection.ownerCloudRecordName = ownerCloudRecordName
         collection.createdAt = Date()

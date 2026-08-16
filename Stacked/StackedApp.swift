@@ -10,6 +10,8 @@ import CoreData
 struct StackedApp: App {
     #if os(iOS)
     @UIApplicationDelegateAdaptor(CloudKitSharingAppDelegate.self) private var appDelegate
+    #elseif os(macOS)
+    @NSApplicationDelegateAdaptor(CloudKitSharingAppDelegate.self) private var appDelegate
     #endif
 
     @State private var router = AppRouter()
@@ -40,7 +42,7 @@ private struct iOSAppRoot: View {
     @Environment(SubscriptionService.self) private var subscriptions
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var bootstrap: iOSAppBootstrap?
+    @State private var bootstrap: AppBootstrap?
 
     var body: some View {
         Group {
@@ -48,7 +50,7 @@ private struct iOSAppRoot: View {
                 RootView()
                     .environment(\.managedObjectContext, bootstrap.persistence.viewContext)
                     .environment(bootstrap.identity)
-                    .environment(bootstrap.householdManager)
+                    .environment(bootstrap.orgManager)
                     .environment(bootstrap.sharingService)
                     .stackedScreenBackground()
             } else {
@@ -62,19 +64,19 @@ private struct iOSAppRoot: View {
         .task {
             await subscriptions.load()
             guard bootstrap == nil else { return }
-            bootstrap = await iOSAppBootstrap.load()
+            bootstrap = await AppBootstrap.load()
         }
         .onReceive(NotificationCenter.default.publisher(for: .stackedPersistenceDidReload)) { _ in
             Task {
                 bootstrap = nil
-                bootstrap = await iOSAppBootstrap.load()
+                bootstrap = await AppBootstrap.load()
             }
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task {
                 await subscriptions.refreshEntitlements()
-                await iOSAppBootstrap.refreshAfterForeground(bootstrap: bootstrap)
+                await AppBootstrap.refreshAfterForeground(bootstrap: bootstrap)
             }
         }
     }
@@ -90,49 +92,6 @@ private struct iOSAppRoot: View {
 
     @Environment(\.colorScheme) private var colorScheme
 }
-
-@MainActor
-private struct iOSAppBootstrap {
-    let persistence: PersistenceController
-    let identity: CloudKitIdentityService
-    let householdManager: HouseholdManager
-    let sharingService: HouseholdSharingService
-
-    static func load() async -> iOSAppBootstrap {
-        let persistence = PersistenceController.shared
-        await persistence.waitUntilStoresAreLoaded()
-        #if os(iOS)
-        await persistence.waitForInitialCloudKitImport()
-        #endif
-
-        let householdManager = HouseholdManager.shared
-        householdManager.startObservingIfNeeded()
-        householdManager.refresh(in: persistence.viewContext)
-
-        let identity = CloudKitIdentityService.shared
-        await identity.refresh()
-        SeedData.seedIfNeeded(persistence.viewContext)
-        householdManager.refresh(in: persistence.viewContext)
-
-        let sharingService = HouseholdSharingService.shared
-        await sharingService.refreshRole(for: householdManager.activeHousehold)
-
-        return iOSAppBootstrap(
-            persistence: persistence,
-            identity: identity,
-            householdManager: householdManager,
-            sharingService: sharingService
-        )
-    }
-
-    static func refreshAfterForeground(bootstrap: iOSAppBootstrap?) async {
-        await CloudKitIdentityService.shared.refresh()
-        guard let bootstrap else { return }
-        bootstrap.householdManager.refresh(in: bootstrap.persistence.viewContext)
-        bootstrap.householdManager.bumpLibraryRevision()
-        await bootstrap.sharingService.refreshRole(for: bootstrap.householdManager.activeHousehold)
-    }
-}
 #endif
 
 #if os(macOS)
@@ -140,30 +99,96 @@ private struct macOSAppRoot: View {
     @Environment(AppRouter.self) private var router
     @Environment(AppSettings.self) private var appSettings
     @Environment(SubscriptionService.self) private var subscriptions
+    @Environment(\.scenePhase) private var scenePhase
 
-    @State private var persistence = PersistenceController.shared
-    @State private var identity = CloudKitIdentityService.shared
-    @State private var householdManager = HouseholdManager.shared
-    @State private var sharingService = HouseholdSharingService.shared
+    @State private var bootstrap: AppBootstrap?
 
     var body: some View {
-        RootView()
-            .environment(router)
-            .environment(appSettings)
-            .environment(subscriptions)
-            .environment(\.managedObjectContext, persistence.viewContext)
-            .environment(identity)
-            .environment(householdManager)
-            .environment(sharingService)
-            .tint(StackedTheme.accent)
-            .stackedScreenBackground()
-            .task {
-                await subscriptions.load()
-                await persistence.waitUntilStoresAreLoaded()
-                householdManager.startObservingIfNeeded()
-                householdManager.refresh(in: persistence.viewContext)
-                SeedData.seedIfNeeded(persistence.viewContext)
+        Group {
+            if let bootstrap {
+                RootView()
+                    .environment(\.managedObjectContext, bootstrap.persistence.viewContext)
+                    .environment(bootstrap.identity)
+                    .environment(bootstrap.orgManager)
+                    .environment(bootstrap.sharingService)
+                    .stackedScreenBackground()
+            } else {
+                launchPlaceholder
             }
+        }
+        .environment(router)
+        .environment(appSettings)
+        .environment(subscriptions)
+        .tint(StackedTheme.accent)
+        .task {
+            await subscriptions.load()
+            guard bootstrap == nil else { return }
+            bootstrap = await AppBootstrap.load()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .stackedPersistenceDidReload)) { _ in
+            Task {
+                bootstrap = nil
+                bootstrap = await AppBootstrap.load()
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task {
+                await subscriptions.refreshEntitlements()
+                await AppBootstrap.refreshAfterForeground(bootstrap: bootstrap)
+            }
+        }
     }
+
+    private var launchPlaceholder: some View {
+        ZStack {
+            StackedTheme.Background.primary
+            StackedTheme.Gradient.backdrop(for: colorScheme)
+            ProgressView()
+        }
+    }
+
+    @Environment(\.colorScheme) private var colorScheme
 }
 #endif
+
+@MainActor
+private struct AppBootstrap {
+    let persistence: PersistenceController
+    let identity: CloudKitIdentityService
+    let orgManager: OrgManager
+    let sharingService: OrgSharingService
+
+    static func load() async -> AppBootstrap {
+        let persistence = PersistenceController.shared
+        await persistence.waitUntilStoresAreLoaded()
+        await persistence.waitForInitialCloudKitImport()
+
+        let orgManager = OrgManager.shared
+        orgManager.startObservingIfNeeded()
+        orgManager.refresh(in: persistence.viewContext)
+
+        let identity = CloudKitIdentityService.shared
+        await identity.refresh()
+        SeedData.seedIfNeeded(persistence.viewContext)
+        orgManager.refresh(in: persistence.viewContext)
+
+        let sharingService = OrgSharingService.shared
+        await sharingService.refreshRole(for: orgManager.activeOrg)
+
+        return AppBootstrap(
+            persistence: persistence,
+            identity: identity,
+            orgManager: orgManager,
+            sharingService: sharingService
+        )
+    }
+
+    static func refreshAfterForeground(bootstrap: AppBootstrap?) async {
+        await CloudKitIdentityService.shared.refresh()
+        guard let bootstrap else { return }
+        bootstrap.orgManager.refresh(in: bootstrap.persistence.viewContext)
+        bootstrap.orgManager.bumpLibraryRevision()
+        await bootstrap.sharingService.refreshRole(for: bootstrap.orgManager.activeOrg)
+    }
+}

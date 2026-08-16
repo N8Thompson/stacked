@@ -34,17 +34,17 @@
         <attribute name="ownerCloudRecordName" attributeType="String" defaultValueString=""/>
         <attribute name="ownerDisplayName" attributeType="String" defaultValueString=""/>
         <relationship name="books" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="Book" inverseName="collection" inverseEntity="Book"/>
-        <relationship name="household" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Household" inverseName="collections" inverseEntity="Household"/>
+        <relationship name="org" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Org" inverseName="collections" inverseEntity="Org"/>
     </entity>
-    <entity name="Household" representedClassName="Household" syncable="YES">
+    <entity name="Org" representedClassName="Org" syncable="YES">
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="idString" attributeType="String" defaultValueString=""/>
         <attribute name="name" attributeType="String" defaultValueString=""/>
         <attribute name="showCostTracking" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
-        <relationship name="bindings" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ItemBinding" inverseName="household" inverseEntity="ItemBinding"/>
-        <relationship name="collections" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="BookCollection" inverseName="household" inverseEntity="BookCollection"/>
-        <relationship name="formats" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ItemFormat" inverseName="household" inverseEntity="ItemFormat"/>
-        <relationship name="locations" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="StorageLocation" inverseName="household" inverseEntity="StorageLocation"/>
+        <relationship name="bindings" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ItemBinding" inverseName="org" inverseEntity="ItemBinding"/>
+        <relationship name="collections" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="BookCollection" inverseName="org" inverseEntity="BookCollection"/>
+        <relationship name="formats" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ItemFormat" inverseName="org" inverseEntity="ItemFormat"/>
+        <relationship name="locations" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="StorageLocation" inverseName="org" inverseEntity="StorageLocation"/>
     </entity>
     <entity name="ItemBinding" representedClassName="ItemBinding" syncable="YES">
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
@@ -52,7 +52,7 @@
         <attribute name="isDefault" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="name" attributeType="String" defaultValueString=""/>
         <relationship name="books" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Book" inverseName="bindingOption" inverseEntity="Book"/>
-        <relationship name="household" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Household" inverseName="bindings" inverseEntity="Household"/>
+        <relationship name="org" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Org" inverseName="bindings" inverseEntity="Org"/>
     </entity>
     <entity name="ItemFormat" representedClassName="ItemFormat" syncable="YES">
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
@@ -60,7 +60,7 @@
         <attribute name="isDefault" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="name" attributeType="String" defaultValueString=""/>
         <relationship name="books" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Book" inverseName="format" inverseEntity="Book"/>
-        <relationship name="household" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Household" inverseName="formats" inverseEntity="Household"/>
+        <relationship name="org" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Org" inverseName="formats" inverseEntity="Org"/>
     </entity>
     <entity name="StorageLocation" representedClassName="StorageLocation" syncable="YES">
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
@@ -68,6 +68,6 @@
         <attribute name="isDefault" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="name" attributeType="String" defaultValueString=""/>
         <relationship name="books" optional="YES" toMany="YES" deletionRule="Nullify" destinationEntity="Book" inverseName="location" inverseEntity="Book"/>
-        <relationship name="household" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Household" inverseName="locations" inverseEntity="Household"/>
+        <relationship name="org" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="Org" inverseName="locations" inverseEntity="Org"/>
     </entity>
 </model>

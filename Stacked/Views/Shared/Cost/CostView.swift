@@ -8,11 +8,11 @@
 import SwiftUI
 
 struct CostView: View {
-    @Environment(HouseholdManager.self) private var householdManager
+    @Environment(OrgManager.self) private var orgManager
     @Environment(\.managedObjectContext) private var context
 
-    private var books: [Book] { householdManager.allBooks(in: context) }
-    private var locations: [StorageLocation] { householdManager.locations }
+    private var books: [Book] { orgManager.allBooks(in: context) }
+    private var locations: [StorageLocation] { orgManager.locations }
 
     var body: some View {
         List {

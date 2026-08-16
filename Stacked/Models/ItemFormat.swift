@@ -12,7 +12,7 @@ public class ItemFormat: NSManagedObject, Identifiable {
     @NSManaged public var name: String
     @NSManaged public var isDefault: Bool
     @NSManaged public var createdAt: Date?
-    @NSManaged public var household: Household?
+    @NSManaged public var org: Org?
     @NSManaged public var books: NSSet?
 
     @nonobjc public class func fetchRequest() -> NSFetchRequest<ItemFormat> {
@@ -27,13 +27,13 @@ public class ItemFormat: NSManagedObject, Identifiable {
         (books as? Set<Book> ?? []).count
     }
 
-    static func create(in context: NSManagedObjectContext, household: Household, name: String, isDefault: Bool = false) -> ItemFormat {
+    static func create(in context: NSManagedObjectContext, org: Org, name: String, isDefault: Bool = false) -> ItemFormat {
         let format = ItemFormat(context: context)
         format.idString = UUID().uuidString
         format.name = name
         format.isDefault = isDefault
         format.createdAt = Date()
-        format.household = household
+        format.org = org
         return format
     }
 }

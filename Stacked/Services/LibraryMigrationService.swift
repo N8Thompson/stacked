@@ -25,7 +25,7 @@ struct LibraryExportRoot: Codable {
     var version: Int
     var exportedAt: Date
     var exportedByDisplayName: String
-    var householdName: String
+    var orgName: String
     var taxonomy: ExportTaxonomy
     var books: [ExportBook]
 }
@@ -67,8 +67,8 @@ enum LibraryMigrationService {
     ]
 
     @MainActor
-    static func exportHousehold(_ household: Household, context: NSManagedObjectContext) throws -> URL {
-        let payload = try backupPayload(household, context: context)
+    static func exportOrg(_ org: Org, context: NSManagedObjectContext) throws -> URL {
+        let payload = try backupPayload(org, context: context)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
@@ -80,8 +80,8 @@ enum LibraryMigrationService {
     }
 
     @MainActor
-    static func portableCSVURL(_ household: Household, context: NSManagedObjectContext) throws -> URL {
-        let books = HouseholdManager.shared.allBooks(in: context)
+    static func portableCSVURL(_ org: Org, context: NSManagedObjectContext) throws -> URL {
+        let books = OrgManager.shared.allBooks(in: context)
         var rows = [CSVEscaping.row(portableCSVHeader)]
         for book in books.sorted(by: { $0.title < $1.title }) {
             rows.append(CSVEscaping.row([
@@ -107,18 +107,18 @@ enum LibraryMigrationService {
     }
 
     @MainActor
-    static func backupPayload(_ household: Household, context: NSManagedObjectContext) throws -> LibraryExportPayload {
-        let books = HouseholdManager.shared.allBooks(in: context)
+    static func backupPayload(_ org: Org, context: NSManagedObjectContext) throws -> LibraryExportPayload {
+        let books = OrgManager.shared.allBooks(in: context)
         return LibraryExportPayload(
             stackedLibraryExport: LibraryExportRoot(
                 version: 1,
                 exportedAt: Date(),
                 exportedByDisplayName: CloudKitIdentityService.shared.displayName,
-                householdName: household.name,
+                orgName: org.name,
                 taxonomy: ExportTaxonomy(
-                    locations: HouseholdManager.shared.locations.map(\.name),
-                    formats: HouseholdManager.shared.formats.map(\.name),
-                    bindings: HouseholdManager.shared.bindings.map(\.name)
+                    locations: OrgManager.shared.locations.map(\.name),
+                    formats: OrgManager.shared.formats.map(\.name),
+                    bindings: OrgManager.shared.bindings.map(\.name)
                 ),
                 books: books.map(exportBook)
             )
@@ -150,21 +150,21 @@ enum LibraryMigrationService {
     }
 
     @MainActor
-    static func applyImport(_ preview: MigrationPreview, into household: Household, context: NSManagedObjectContext) throws {
-        guard let collection = HouseholdManager.shared.defaultCollection(in: context) else {
+    static func applyImport(_ preview: MigrationPreview, into org: Org, context: NSManagedObjectContext) throws {
+        guard let collection = OrgManager.shared.defaultCollection(in: context) else {
             throw BookSearchError.transport("No collection to import into.")
         }
         let identity = CloudKitIdentityService.shared
         let importDate = Date()
 
         for name in preview.payload.stackedLibraryExport.taxonomy.locations {
-            _ = TaxonomyService.findOrCreateLocation(name: name, household: household, in: context)
+            _ = TaxonomyService.findOrCreateLocation(name: name, org: org, in: context)
         }
         for name in preview.payload.stackedLibraryExport.taxonomy.formats {
-            _ = TaxonomyService.findOrCreateFormat(name: name, household: household, in: context)
+            _ = TaxonomyService.findOrCreateFormat(name: name, org: org, in: context)
         }
         for name in preview.payload.stackedLibraryExport.taxonomy.bindings {
-            _ = TaxonomyService.findOrCreateBinding(name: name, household: household, in: context)
+            _ = TaxonomyService.findOrCreateBinding(name: name, org: org, in: context)
         }
 
         for exported in preview.payload.stackedLibraryExport.books {
@@ -196,13 +196,13 @@ enum LibraryMigrationService {
                 book.coverOverride = Data(base64Encoded: b64)
             }
             if !exported.location.isEmpty {
-                book.location = TaxonomyService.findOrCreateLocation(name: exported.location, household: household, in: context)
+                book.location = TaxonomyService.findOrCreateLocation(name: exported.location, org: org, in: context)
             }
             if !exported.format.isEmpty {
-                book.format = TaxonomyService.findOrCreateFormat(name: exported.format, household: household, in: context)
+                book.format = TaxonomyService.findOrCreateFormat(name: exported.format, org: org, in: context)
             }
             if !exported.binding.isEmpty {
-                book.bindingOption = TaxonomyService.findOrCreateBinding(name: exported.binding, household: household, in: context)
+                book.bindingOption = TaxonomyService.findOrCreateBinding(name: exported.binding, org: org, in: context)
             }
             book.addedAt = importDate
             book.addedByCloudRecordName = identity.recordName ?? ""

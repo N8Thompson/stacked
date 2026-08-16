@@ -150,7 +150,7 @@ final class AddBookActions {
         books: [Book],
         locations: [StorageLocation],
         formats: [ItemFormat],
-        householdManager: HouseholdManager,
+        orgManager: OrgManager,
         context: NSManagedObjectContext,
         isPlus: Bool
     ) -> AddOutcome? {
@@ -163,11 +163,11 @@ final class AddBookActions {
                 presentPaywall(uniqueTitleLimitReason())
                 return nil
             }
-            guard let collection = householdManager.defaultCollection(in: context) else { return nil }
+            guard let collection = orgManager.defaultCollection(in: context) else { return nil }
             let bindingOption: ItemBinding? = {
                 guard let name = result.binding, !name.isEmpty,
-                      let household = householdManager.activeHousehold else { return nil }
-                return TaxonomyService.findOrCreateBinding(name: name, household: household, in: context)
+                      let org = orgManager.activeOrg else { return nil }
+                return TaxonomyService.findOrCreateBinding(name: name, org: org, in: context)
             }()
             _ = Book.create(
                 in: context,
@@ -203,7 +203,7 @@ final class AddBookActions {
         _ raw: String,
         locations: [StorageLocation],
         formats: [ItemFormat],
-        householdManager: HouseholdManager,
+        orgManager: OrgManager,
         context: NSManagedObjectContext,
         provider: BookSearchProvider,
         isPlus: Bool
@@ -228,14 +228,14 @@ final class AddBookActions {
                 recordScannerError(message: "No book found for \(isbn).", scanned: isbn)
                 return
             }
-            let books = householdManager.allBooks(in: context)
+            let books = orgManager.allBooks(in: context)
             guard let outcome = add(
                 result: result,
                 count: 1,
                 books: books,
                 locations: locations,
                 formats: formats,
-                householdManager: householdManager,
+                orgManager: orgManager,
                 context: context,
                 isPlus: isPlus
             ) else {
@@ -268,11 +268,11 @@ final class AddBookActions {
     /// library (deleting the title if it was the last copy).
     func removeScannerItem(
         _ item: ScannerSessionItem,
-        householdManager: HouseholdManager,
+        orgManager: OrgManager,
         context: NSManagedObjectContext
     ) {
         if case .added(let info) = item {
-            let books = householdManager.allBooks(in: context)
+            let books = orgManager.allBooks(in: context)
             if let book = books.first(where: { $0.isbn == info.isbn }) {
                 if book.copies > 1 {
                     book.copies -= 1

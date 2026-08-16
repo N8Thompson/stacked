@@ -14,11 +14,7 @@ enum PersistenceMode: String, Codable {
     static var current: PersistenceMode {
         get {
             guard let raw = UserDefaults.standard.string(forKey: preferenceKey) else {
-                #if os(iOS)
                 return .iCloud
-                #else
-                return .local
-                #endif
             }
             return PersistenceMode(rawValue: raw) ?? .iCloud
         }

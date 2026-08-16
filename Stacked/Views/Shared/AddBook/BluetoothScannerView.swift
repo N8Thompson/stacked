@@ -15,7 +15,7 @@ struct BluetoothScannerView: View {
     let formats: [ItemFormat]
 
     @Environment(\.managedObjectContext) private var context
-    @Environment(HouseholdManager.self) private var householdManager
+    @Environment(OrgManager.self) private var orgManager
     @Environment(SubscriptionService.self) private var subscriptions
 
     @State private var monitor = ScannerConnectionMonitor()
@@ -92,7 +92,7 @@ struct BluetoothScannerView: View {
                 raw,
                 locations: locations,
                 formats: formats,
-                householdManager: householdManager,
+                orgManager: orgManager,
                 context: context,
                 provider: provider,
                 isPlus: subscriptions.isPlus
@@ -119,7 +119,7 @@ struct BluetoothScannerView: View {
                             Button(role: .destructive) {
                                 actions.removeScannerItem(
                                     item,
-                                    householdManager: householdManager,
+                                    orgManager: orgManager,
                                     context: context
                                 )
                             } label: {

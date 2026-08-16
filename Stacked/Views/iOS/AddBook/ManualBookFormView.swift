@@ -55,7 +55,7 @@ struct ManualBookFormView: View {
     var onSaved: () -> Void
 
     @Environment(\.managedObjectContext) private var context
-    @Environment(HouseholdManager.self) private var householdManager
+    @Environment(OrgManager.self) private var orgManager
     @Environment(SubscriptionService.self) private var subscriptions
     @State private var showPaywall = false
 
@@ -69,9 +69,9 @@ struct ManualBookFormView: View {
     @State private var initialSnapshot: ManualDraftSnapshot?
     @State private var draftWasSaved = false
 
-    private var books: [Book] { householdManager.allBooks(in: context) }
-    private var locations: [StorageLocation] { householdManager.locations }
-    private var formats: [ItemFormat] { householdManager.formats }
+    private var books: [Book] { orgManager.allBooks(in: context) }
+    private var locations: [StorageLocation] { orgManager.locations }
+    private var formats: [ItemFormat] { orgManager.formats }
 
     private var isValid: Bool {
         guard let draft else { return false }
@@ -155,7 +155,7 @@ struct ManualBookFormView: View {
         guard !didInitDraft else { return }
         didInitDraft = true
 
-        guard let collection = householdManager.defaultCollection(in: context) else { return }
+        guard let collection = orgManager.defaultCollection(in: context) else { return }
         draft = Book.create(in: context, collection: collection, isbn: "", title: "", isManualEntry: true)
 
         if let location = preselection.location {

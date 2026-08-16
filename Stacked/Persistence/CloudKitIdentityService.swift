@@ -3,13 +3,10 @@
 //  Stacked
 //
 //  Resolves the signed-in iCloud user's record name and display name.
-//  CloudKit is iOS-only; macOS runs local Core Data without iCloud entitlements.
 //
 
 import Foundation
-#if os(iOS)
 import CloudKit
-#endif
 
 @MainActor
 @Observable
@@ -18,19 +15,15 @@ final class CloudKitIdentityService {
 
     private(set) var recordName: String?
     private(set) var displayName: String = "You"
-
-    #if os(iOS)
     private(set) var accountStatus: CKAccountStatus = .couldNotDetermine
+
     var isSignedIn: Bool { accountStatus == .available }
+
     private var container: CKContainer {
         CKContainer(identifier: PersistenceController.cloudKitContainerID)
     }
-    #else
-    var isSignedIn: Bool { false }
-    #endif
 
     func refresh() async {
-        #if os(iOS)
         do {
             accountStatus = try await container.accountStatus()
             guard accountStatus == .available else {
@@ -49,10 +42,6 @@ final class CloudKitIdentityService {
         } catch {
             accountStatus = .couldNotDetermine
         }
-        #else
-        recordName = nil
-        displayName = "You"
-        #endif
     }
 
     func applyProvenance(to book: Book) {

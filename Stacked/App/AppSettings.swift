@@ -12,9 +12,9 @@ import Foundation
 @Observable
 final class AppSettings {
     var costTrackingPreference: Bool {
-        get { HouseholdManager.shared.activeHousehold?.showCostTracking ?? true }
+        get { OrgManager.shared.activeOrg?.showCostTracking ?? true }
         set {
-            HouseholdManager.shared.activeHousehold?.showCostTracking = newValue
+            OrgManager.shared.activeOrg?.showCostTracking = newValue
             PersistenceController.shared.save()
         }
     }

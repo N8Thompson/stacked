@@ -21,23 +21,21 @@ struct SettingsContent: View {
 
     @Environment(\.managedObjectContext) private var context
     @Environment(AppSettings.self) private var appSettings
-    @Environment(HouseholdManager.self) private var householdManager
+    @Environment(OrgManager.self) private var orgManager
     @Environment(CloudKitIdentityService.self) private var identity
-    @Environment(HouseholdSharingService.self) private var sharingService
+    @Environment(OrgSharingService.self) private var sharingService
     @Environment(SubscriptionService.self) private var subscriptions
 
     @State private var persistenceError: String?
     @State private var showDisconnectConfirm = false
     @State private var showReconnectOptions = false
     @State private var showLeaveAndKeepCopy = false
-    #if os(iOS)
     @State private var isOpeningUserManagement = false
-    #endif
 
-    private var locations: [StorageLocation] { householdManager.locations }
-    private var formats: [ItemFormat] { householdManager.formats }
-    private var bindings: [ItemBinding] { householdManager.bindings }
-    private var household: Household? { householdManager.activeHousehold }
+    private var locations: [StorageLocation] { orgManager.locations }
+    private var formats: [ItemFormat] { orgManager.formats }
+    private var bindings: [ItemBinding] { orgManager.bindings }
+    private var org: Org? { orgManager.activeOrg }
 
     var body: some View {
         settingsSections
@@ -47,7 +45,7 @@ struct SettingsContent: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Future changes will stay on this iPhone. Your iCloud copy is not deleted. Other devices will keep the last synced version until you reconnect.")
+                Text("Future changes will stay on \(deviceName). Your iCloud copy is not deleted. Other devices will keep the last synced version until you reconnect.")
             }
             .alert("Reconnect iCloud?", isPresented: $showReconnectOptions) {
                 Button("Merge this device into iCloud") {
@@ -84,7 +82,7 @@ struct SettingsContent: View {
         VStack(alignment: .leading, spacing: 16) {
             subscriptionSection
             iCloudSection
-            householdSection
+            orgSection
             collectionSection
             costSection
             locationsSection
@@ -96,7 +94,7 @@ struct SettingsContent: View {
         #else
         subscriptionSection
         iCloudSection
-        householdSection
+        orgSection
         collectionSection
         costSection
         locationsSection
@@ -115,14 +113,19 @@ struct SettingsContent: View {
         ) {
             settingsRow(title: "Status", value: plusStatusLabel)
             cardDivider()
-            if subscriptions.isPlus {
+            if subscriptions.hasStoreSubscription {
                 cardButton(title: "Manage subscription", systemImage: "creditcard") {
                     openManageSubscriptions()
                 }
-            } else {
+                cardDivider()
+            } else if !subscriptions.isPlus {
                 cardButton(title: "Upgrade to Stacked +", systemImage: "star") {
                     presentPaywall("Stacked + unlocks unlimited titles, more locations, cost tracking, and collection sharing.")
                 }
+                cardDivider()
+            }
+            cardButton(title: "Redeem code", systemImage: "gift") {
+                sheet = .redeemCode
             }
             cardDivider()
             cardButton(title: "Restore purchases", systemImage: "arrow.clockwise") {
@@ -144,18 +147,23 @@ struct SettingsContent: View {
                 Text(plusStatusLabel)
                     .foregroundStyle(StackedTheme.Text.secondary)
             }
-            if subscriptions.isPlus {
+            if subscriptions.hasStoreSubscription {
                 Button {
                     openManageSubscriptions()
                 } label: {
                     Label("Manage subscription", systemImage: "creditcard")
                 }
-            } else {
+            } else if !subscriptions.isPlus {
                 Button {
                     presentPaywall("Stacked + unlocks unlimited titles, more locations, cost tracking, and collection sharing.")
                 } label: {
                     Label("Upgrade to Stacked +", systemImage: "star")
                 }
+            }
+            Button {
+                sheet = .redeemCode
+            } label: {
+                Label("Redeem code", systemImage: "gift")
             }
             Button {
                 Task { await subscriptions.restore() }
@@ -185,9 +193,33 @@ struct SettingsContent: View {
         #if os(macOS)
         settingsCard(
             title: "iCloud",
-            footer: "The Mac app keeps your library on this Mac. Use Move or share collection to copy it, or open Stacked on iPhone for iCloud sync and user management."
+            footer: iCloudFooter
         ) {
-            settingsRow(title: "Library", value: "This Mac")
+            settingsRow(
+                title: "Account",
+                value: identity.isSignedIn ? "Signed in" : "Not signed in"
+            )
+            cardDivider()
+            settingsRow(title: "Library", value: libraryLocationLabel)
+            switch disconnectKind {
+            case .disconnectToLocal:
+                cardDivider()
+                cardButton(title: "Use only on this device", systemImage: "externaldrive") {
+                    showDisconnectConfirm = true
+                }
+            case .leaveAndKeepLocalCopy:
+                cardDivider()
+                cardButton(title: "Leave and keep a local copy", systemImage: "rectangle.portrait.and.arrow.right") {
+                    showLeaveAndKeepCopy = true
+                }
+            case .reconnect:
+                cardDivider()
+                cardButton(title: "Reconnect iCloud", systemImage: "icloud") {
+                    showReconnectOptions = true
+                }
+            case .notAvailable:
+                EmptyView()
+            }
         }
         #else
         Section {
@@ -224,13 +256,21 @@ struct SettingsContent: View {
     }
 
     @ViewBuilder
-    private var householdSection: some View {
+    private var orgSection: some View {
         #if os(macOS)
         settingsCard(
             title: "Users",
-            footer: "User management is available on iPhone. On Mac, send a Stacked backup from Move or share collection."
+            footer: "All users have full access to manage and contribute to the collection. Only the owner can add or remove additional users."
         ) {
-            settingsRow(title: "User management", value: "iPhone only")
+            cardButton(title: "User management", systemImage: "person.2") {
+                Task { await openUserManagement() }
+            }
+            if sharingService.pendingMergeAfterJoin {
+                cardDivider()
+                cardButton(title: "Add my books to shared collection", systemImage: "square.and.arrow.down.on.square") {
+                    contributePrivateLibrary()
+                }
+            }
         }
         #else
         Section {
@@ -312,7 +352,7 @@ struct SettingsContent: View {
                 }
             } else {
                 cardButton(title: "Unlock cost tracking", systemImage: "lock") {
-                    presentPaywall("Cost tracking is included with Stacked +.")
+                    presentPaywall("Stacked + unlocks unlimited titles, more locations, cost tracking, and collection sharing.")
                 }
             }
         }
@@ -627,8 +667,23 @@ struct SettingsContent: View {
     }
     #endif
 
+    private var deviceName: String {
+        #if os(macOS)
+        "this Mac"
+        #else
+        "this iPhone"
+        #endif
+    }
+
     private var libraryLocationLabel: String {
-        PersistenceController.shared.mode == .local ? "This iPhone" : "iCloud"
+        if PersistenceController.shared.mode == .local {
+            #if os(macOS)
+            return "This Mac"
+            #else
+            return "This iPhone"
+            #endif
+        }
+        return "iCloud"
     }
 
     private var disconnectKind: PersistenceSwitchPolicy.DisconnectKind {
@@ -642,13 +697,17 @@ struct SettingsContent: View {
     private var iCloudFooter: String {
         switch disconnectKind {
         case .reconnect:
-            return "This iPhone has a local copy. iCloud is not being updated. Reconnect to merge this device into iCloud, or discard local changes and use iCloud."
+            return "\(libraryLocationLabel) has a local copy. iCloud is not being updated. Reconnect to merge this device into iCloud, or discard local changes and use iCloud."
         case .leaveAndKeepLocalCopy:
-            return "You're viewing someone else's shared collection. Leave and keep a local copy if you want the titles on this iPhone. Leaving removes your access; the owner's collection stays."
+            return "You're viewing someone else's shared collection. Leave and keep a local copy if you want the titles on \(deviceName). Leaving removes your access; the owner's collection stays."
         case .disconnectToLocal:
             return "Your library lives in iCloud and syncs to your other devices. Use only on this device keeps a copy here without deleting iCloud."
         case .notAvailable:
+            #if os(macOS)
+            return "Sign in under System Settings → Apple Account to back up and share."
+            #else
             return "Sign in under Settings → Apple ID to back up and share."
+            #endif
         }
     }
 
@@ -658,13 +717,21 @@ struct SettingsContent: View {
             return subscriptions.isPlus ? "Subscribed (simulated)" : "Free (simulated)"
         }
         #endif
+        if subscriptions.hasComplimentaryPlus {
+            return "Complimentary"
+        }
         return subscriptions.isPlus ? "Subscribed" : "Free"
     }
 
     private var plusFooter: String {
-        let status = subscriptions.isPlus
-            ? "Stacked + is active on this Apple Account and works on iPhone and Mac."
-            : "Free libraries include \(EntitlementPolicy.freeUniqueTitleLimit) unique titles and \(EntitlementPolicy.freeLocationLimit) locations. Existing titles stay if a subscription ends."
+        let status: String
+        if subscriptions.hasComplimentaryPlus {
+            status = "Stacked + is unlocked with a complimentary code on this Apple Account and works on iPhone and Mac."
+        } else if subscriptions.isPlus {
+            status = "Stacked + is active on this Apple Account and works on iPhone and Mac."
+        } else {
+            status = "Free libraries include \(EntitlementPolicy.freeUniqueTitleLimit) unique titles and \(EntitlementPolicy.freeLocationLimit) locations. Existing titles stay if a subscription ends."
+        }
         #if DEBUG
         return status + " Simulate Plus is a debug control and overrides App Store status on this device."
         #else
@@ -704,21 +771,20 @@ struct SettingsContent: View {
     }
 
     private func contributePrivateLibrary() {
-        guard let household,
-              let source = householdManager.privateLibraryCollection(in: context) else { return }
-        try? CollectionMergeService.mergePrivateIntoHousehold(source: source, targetHousehold: household, in: context)
+        guard let org,
+              let source = orgManager.privateLibraryCollection(in: context) else { return }
+        try? CollectionMergeService.mergePrivateIntoOrg(source: source, targetOrg: org, in: context)
         sharingService.pendingMergeAfterJoin = false
     }
 
-    #if os(iOS)
     private func openUserManagement() async {
-        guard !isOpeningUserManagement, let household else { return }
+        guard !isOpeningUserManagement, let org else { return }
         isOpeningUserManagement = true
         defer { isOpeningUserManagement = false }
 
         do {
             let presented = try await sharingService.presentUserManagement(
-                for: household,
+                for: org,
                 isPlus: subscriptions.isPlus
             )
             if !presented {
@@ -728,7 +794,6 @@ struct SettingsContent: View {
             persistenceError = error.localizedDescription
         }
     }
-    #endif
 
     private func disconnectToLocal() {
         Task {
@@ -757,23 +822,21 @@ struct SettingsContent: View {
     }
 
     private func leaveAndKeepLocalCopy() {
-        #if os(iOS)
         Task {
             do {
-                guard let household else { return }
-                try await PersistenceSwitchService.leaveShareAndKeepLocalCopy(household)
+                guard let org else { return }
+                try await PersistenceSwitchService.leaveShareAndKeepLocalCopy(org)
             } catch {
                 persistenceError = error.localizedDescription
             }
         }
-        #endif
     }
 
     private func addLocation() -> NameEditorTarget {
         NameEditorTarget(title: "New Location", initialName: "") { name in
-            guard let household else { return }
+            guard let org else { return }
             let isFirst = locations.isEmpty
-            _ = StorageLocation.create(in: context, household: household, name: name, isDefault: isFirst)
+            _ = StorageLocation.create(in: context, org: org, name: name, isDefault: isFirst)
             PersistenceController.shared.save()
         }
     }
@@ -822,9 +885,9 @@ struct SettingsContent: View {
 
     private func addFormat() -> NameEditorTarget {
         NameEditorTarget(title: "New Format", initialName: "") { name in
-            guard let household else { return }
+            guard let org else { return }
             let isFirst = formats.isEmpty
-            _ = ItemFormat.create(in: context, household: household, name: name, isDefault: isFirst)
+            _ = ItemFormat.create(in: context, org: org, name: name, isDefault: isFirst)
             PersistenceController.shared.save()
         }
     }
@@ -858,9 +921,9 @@ struct SettingsContent: View {
 
     private func addBinding() -> NameEditorTarget {
         NameEditorTarget(title: "New Binding", initialName: "") { name in
-            guard let household else { return }
+            guard let org else { return }
             let isFirst = bindings.isEmpty
-            _ = ItemBinding.create(in: context, household: household, name: name, isDefault: isFirst)
+            _ = ItemBinding.create(in: context, org: org, name: name, isDefault: isFirst)
             PersistenceController.shared.save()
         }
     }

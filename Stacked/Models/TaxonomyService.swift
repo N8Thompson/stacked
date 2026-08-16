@@ -10,39 +10,39 @@ import Foundation
 
 enum TaxonomyService {
     @MainActor
-    static func findOrCreateLocation(name: String, household: Household, in context: NSManagedObjectContext) -> StorageLocation? {
+    static func findOrCreateLocation(name: String, org: Org, in context: NSManagedObjectContext) -> StorageLocation? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        let existing = household.locations as? Set<StorageLocation> ?? []
+        let existing = org.locations as? Set<StorageLocation> ?? []
         if let match = existing.first(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) {
             return match
         }
         let isFirst = existing.isEmpty
-        return StorageLocation.create(in: context, household: household, name: trimmed, isDefault: isFirst)
+        return StorageLocation.create(in: context, org: org, name: trimmed, isDefault: isFirst)
     }
 
     @MainActor
-    static func findOrCreateFormat(name: String, household: Household, in context: NSManagedObjectContext) -> ItemFormat? {
+    static func findOrCreateFormat(name: String, org: Org, in context: NSManagedObjectContext) -> ItemFormat? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        let existing = household.formats as? Set<ItemFormat> ?? []
+        let existing = org.formats as? Set<ItemFormat> ?? []
         if let match = existing.first(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) {
             return match
         }
         let isFirst = existing.isEmpty
-        return ItemFormat.create(in: context, household: household, name: trimmed, isDefault: isFirst)
+        return ItemFormat.create(in: context, org: org, name: trimmed, isDefault: isFirst)
     }
 
     @MainActor
-    static func findOrCreateBinding(name: String, household: Household, in context: NSManagedObjectContext) -> ItemBinding? {
+    static func findOrCreateBinding(name: String, org: Org, in context: NSManagedObjectContext) -> ItemBinding? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        let existing = household.bindings as? Set<ItemBinding> ?? []
+        let existing = org.bindings as? Set<ItemBinding> ?? []
         if let match = existing.first(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) {
             return match
         }
         let isFirst = existing.isEmpty
-        return ItemBinding.create(in: context, household: household, name: trimmed, isDefault: isFirst)
+        return ItemBinding.create(in: context, org: org, name: trimmed, isDefault: isFirst)
     }
 
     @MainActor
@@ -50,8 +50,8 @@ enum TaxonomyService {
         guard !UserDefaults.standard.bool(forKey: "didMigrateLegacyBindingsV1") else { return }
         let books = (try? context.fetch(Book.fetchRequest())) ?? []
         for book in books where !book.binding.isEmpty {
-            if book.bindingOption == nil, let household = book.collection?.household {
-                book.bindingOption = findOrCreateBinding(name: book.binding, household: household, in: context)
+            if book.bindingOption == nil, let org = book.collection?.org {
+                book.bindingOption = findOrCreateBinding(name: book.binding, org: org, in: context)
             }
             book.binding = ""
         }

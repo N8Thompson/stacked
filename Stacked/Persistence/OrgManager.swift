@@ -1,8 +1,8 @@
 //
-//  HouseholdManager.swift
+//  OrgManager.swift
 //  Stacked
 //
-//  Tracks the active household and scopes fetches to it.
+//  Tracks the active org and scopes fetches to it.
 //
 
 import CoreData
@@ -10,10 +10,10 @@ import Foundation
 
 @MainActor
 @Observable
-final class HouseholdManager {
-    static let shared = HouseholdManager()
+final class OrgManager {
+    static let shared = OrgManager()
 
-    private(set) var activeHousehold: Household?
+    private(set) var activeOrg: Org?
     /// Bumped when Core Data saves or remote sync merges so SwiftUI re-reads library data.
     private(set) var libraryRevision = 0
 
@@ -73,32 +73,30 @@ final class HouseholdManager {
     }
 
     func refresh(in context: NSManagedObjectContext) {
-        activeHousehold = nil
-        let request = Household.fetchRequest()
-        request.sortDescriptors = [NSSortDescriptor(keyPath: \Household.createdAt, ascending: false)]
-        let households = (try? context.fetch(request)) ?? []
+        activeOrg = nil
+        let request = Org.fetchRequest()
+        request.sortDescriptors = [NSSortDescriptor(keyPath: \Org.createdAt, ascending: false)]
+        let orgs = (try? context.fetch(request)) ?? []
 
-        #if os(iOS)
         if PersistenceController.shared.usesCloudKit,
            let sharedStore = PersistenceController.shared.sharedStore {
-            activeHousehold = households.first { household in
-                persistentStore(for: household, in: context) == sharedStore
+            activeOrg = orgs.first { org in
+                persistentStore(for: org, in: context) == sharedStore
             }
         }
-        #endif
 
-        activeHousehold = activeHousehold ?? preferredHousehold(from: households, in: context)
+        activeOrg = activeOrg ?? preferredOrg(from: orgs, in: context)
     }
 
-    private func preferredHousehold(from households: [Household], in context: NSManagedObjectContext) -> Household? {
-        households.max { lhs, rhs in
+    private func preferredOrg(from orgs: [Org], in context: NSManagedObjectContext) -> Org? {
+        orgs.max { lhs, rhs in
             bookCount(for: lhs, in: context) < bookCount(for: rhs, in: context)
         }
     }
 
-    private func bookCount(for household: Household, in context: NSManagedObjectContext) -> Int {
+    private func bookCount(for org: Org, in context: NSManagedObjectContext) -> Int {
         let request = Book.fetchRequest()
-        request.predicate = NSPredicate(format: "collection.household == %@", household)
+        request.predicate = NSPredicate(format: "collection.org == %@", org)
         return (try? context.count(for: request)) ?? 0
     }
 
@@ -119,22 +117,17 @@ final class HouseholdManager {
         return nil
     }
 
-    func store(for household: Household, in context: NSManagedObjectContext) -> NSPersistentStore? {
-        persistentStore(for: household, in: context)
+    func store(for org: Org, in context: NSManagedObjectContext) -> NSPersistentStore? {
+        persistentStore(for: org, in: context)
     }
 
-    func isSharedHousehold(_ household: Household, in context: NSManagedObjectContext) -> Bool {
-        #if os(iOS)
+    func isSharedOrg(_ org: Org, in context: NSManagedObjectContext) -> Bool {
         guard PersistenceController.shared.usesCloudKit,
               let sharedStore = PersistenceController.shared.sharedStore else { return false }
-        return store(for: household, in: context) == sharedStore
-        #else
-        return false
-        #endif
+        return store(for: org, in: context) == sharedStore
     }
 
     func privateLibraryCollection(in context: NSManagedObjectContext) -> BookCollection? {
-        #if os(iOS)
         guard let privateStore = PersistenceController.shared.privateStore else { return nil }
 
         let request = BookCollection.fetchRequest()
@@ -147,9 +140,6 @@ final class HouseholdManager {
             let books = (collection.books as? Set<Book>) ?? []
             return !books.isEmpty
         }
-        #else
-        return nil
-        #endif
     }
 
     func privateBookCount(in context: NSManagedObjectContext) -> Int {
@@ -159,45 +149,45 @@ final class HouseholdManager {
 
     func allBooks(in context: NSManagedObjectContext) -> [Book] {
         _ = libraryRevision
-        guard let household = activeHousehold else { return [] }
+        guard let org = activeOrg else { return [] }
         let request = Book.fetchRequest()
-        request.predicate = NSPredicate(format: "collection.household == %@", household)
+        request.predicate = NSPredicate(format: "collection.org == %@", org)
         request.sortDescriptors = [NSSortDescriptor(keyPath: \Book.title, ascending: true)]
         return (try? context.fetch(request)) ?? []
     }
 
     func defaultCollection(in context: NSManagedObjectContext) -> BookCollection? {
-        guard let household = activeHousehold else { return nil }
-        let collections = (household.collections as? Set<BookCollection>) ?? []
+        guard let org = activeOrg else { return nil }
+        let collections = (org.collections as? Set<BookCollection>) ?? []
         return collections.first { $0.isActive } ?? collections.first
     }
 
     var locations: [StorageLocation] {
         _ = libraryRevision
-        guard let household = activeHousehold,
-              let context = household.managedObjectContext else { return [] }
+        guard let org = activeOrg,
+              let context = org.managedObjectContext else { return [] }
         let request = StorageLocation.fetchRequest()
-        request.predicate = NSPredicate(format: "household == %@", household)
+        request.predicate = NSPredicate(format: "org == %@", org)
         request.sortDescriptors = [NSSortDescriptor(keyPath: \StorageLocation.createdAt, ascending: true)]
         return (try? context.fetch(request)) ?? []
     }
 
     var formats: [ItemFormat] {
         _ = libraryRevision
-        guard let household = activeHousehold,
-              let context = household.managedObjectContext else { return [] }
+        guard let org = activeOrg,
+              let context = org.managedObjectContext else { return [] }
         let request = ItemFormat.fetchRequest()
-        request.predicate = NSPredicate(format: "household == %@", household)
+        request.predicate = NSPredicate(format: "org == %@", org)
         request.sortDescriptors = [NSSortDescriptor(keyPath: \ItemFormat.createdAt, ascending: true)]
         return (try? context.fetch(request)) ?? []
     }
 
     var bindings: [ItemBinding] {
         _ = libraryRevision
-        guard let household = activeHousehold,
-              let context = household.managedObjectContext else { return [] }
+        guard let org = activeOrg,
+              let context = org.managedObjectContext else { return [] }
         let request = ItemBinding.fetchRequest()
-        request.predicate = NSPredicate(format: "household == %@", household)
+        request.predicate = NSPredicate(format: "org == %@", org)
         request.sortDescriptors = [NSSortDescriptor(keyPath: \ItemBinding.createdAt, ascending: true)]
         return (try? context.fetch(request)) ?? []
     }

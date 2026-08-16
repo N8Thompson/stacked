@@ -54,9 +54,17 @@ final class EntitlementPolicyTests: XCTestCase {
     }
 
     func testShareCreationRequiresPlusUnlessShareExists() {
-        XCTAssertFalse(HouseholdSharePolicy.canCreateShare(isPlus: false, hasExistingShare: false))
-        XCTAssertTrue(HouseholdSharePolicy.canCreateShare(isPlus: false, hasExistingShare: true))
-        XCTAssertTrue(HouseholdSharePolicy.canCreateShare(isPlus: true, hasExistingShare: false))
+        XCTAssertFalse(OrgSharePolicy.canCreateShare(isPlus: false, hasExistingShare: false))
+        XCTAssertTrue(OrgSharePolicy.canCreateShare(isPlus: false, hasExistingShare: true))
+        XCTAssertTrue(OrgSharePolicy.canCreateShare(isPlus: true, hasExistingShare: false))
+    }
+
+    func testPromoCodeValidationIsCaseInsensitiveAndIgnoresSpaces() {
+        XCTAssertTrue(PlusPromoCode.isValidCode("9bjp-qa4b-cmwm-bwa2"))
+        XCTAssertTrue(PlusPromoCode.isValidCode(" 9BJP-QA4B-CMWM-BWA2 "))
+        XCTAssertTrue(PlusPromoCode.isValidCode("9BJP QA4B CMWM BWA2"))
+        XCTAssertFalse(PlusPromoCode.isValidCode("STACKED-PLUS"))
+        XCTAssertFalse(PlusPromoCode.isValidCode(""))
     }
 }
 
@@ -111,7 +119,7 @@ final class LibraryMigrationTests: XCTestCase {
                 version: 1,
                 exportedAt: Date(),
                 exportedByDisplayName: "Test",
-                householdName: "Home",
+                orgName: "Home",
                 taxonomy: ExportTaxonomy(locations: ["Home Library", "Office"], formats: ["Books"], bindings: ["Paperback"]),
                 books: [
                     sampleBook(isbn: "9780000000001", title: "One", copies: 2, location: "Home Library"),
@@ -133,11 +141,11 @@ final class LibraryMigrationTests: XCTestCase {
         let persistence = PersistenceController(inMemory: true)
         await persistence.waitUntilStoresAreLoaded()
         SeedData.seedIfNeeded(persistence.viewContext)
-        HouseholdManager.shared.refresh(in: persistence.viewContext)
+        OrgManager.shared.refresh(in: persistence.viewContext)
 
-        guard let household = HouseholdManager.shared.activeHousehold,
-              let collection = HouseholdManager.shared.defaultCollection(in: persistence.viewContext) else {
-            XCTFail("Expected a seeded household")
+        guard let org = OrgManager.shared.activeOrg,
+              let collection = OrgManager.shared.defaultCollection(in: persistence.viewContext) else {
+            XCTFail("Expected a seeded org")
             return
         }
 
@@ -158,7 +166,7 @@ final class LibraryMigrationTests: XCTestCase {
                     version: 1,
                     exportedAt: Date(),
                     exportedByDisplayName: "Importer",
-                    householdName: "Other",
+                    orgName: "Other",
                     taxonomy: ExportTaxonomy(locations: ["Home Library"], formats: ["Books"], bindings: ["Paperback"]),
                     books: [
                         sampleBook(isbn: "9780000000001", title: "Owned", copies: 2, location: "Home Library"),
@@ -168,11 +176,11 @@ final class LibraryMigrationTests: XCTestCase {
             )
         ))
 
-        try LibraryMigrationService.applyImport(preview, into: household, context: persistence.viewContext)
+        try LibraryMigrationService.applyImport(preview, into: org, context: persistence.viewContext)
 
         persistence.viewContext.refreshAllObjects()
         XCTAssertEqual(Int(existing.copies), 3)
-        let titles = HouseholdManager.shared.allBooks(in: persistence.viewContext).map(\.isbn).sorted()
+        let titles = OrgManager.shared.allBooks(in: persistence.viewContext).map(\.isbn).sorted()
         XCTAssertEqual(titles, ["9780000000001", "9780000000002"])
     }
 

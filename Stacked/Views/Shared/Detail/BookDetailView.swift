@@ -32,49 +32,68 @@ struct BookDetailView: View {
     }
 
     var body: some View {
-        Form {
-            BookFormContent(
-                book: book,
-                location: locationBinding,
-                format: formatBinding,
-                bindingOption: bindingOptionBinding,
-                isEditing: isEditing,
-                isISBNEditable: book.isManualEntry,
-                listPriceEditable: book.isManualEntry,
-                showDelete: true,
-                validationError: validationError,
-                onDelete: { showDeleteSheet = true },
-                taxonomyPicker: $taxonomyPicker
-            )
-        }
-        .navigationDestination(item: $taxonomyPicker) { kind in
-            TaxonomyPickerView(
-                kind: kind,
-                selectedLocation: locationBinding,
-                selectedFormat: formatBinding,
-                selectedBinding: bindingOptionBinding
-            )
-        }
-        .navigationTitle(book.title)
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button(isEditing ? "Done" : "Edit") {
-                    if isEditing {
-                        guard saveEdits() else { return }
-                    } else {
-                        validationError = nil
+        detailForm
+            .navigationDestination(item: $taxonomyPicker) { kind in
+                TaxonomyPickerView(
+                    kind: kind,
+                    selectedLocation: locationBinding,
+                    selectedFormat: formatBinding,
+                    selectedBinding: bindingOptionBinding
+                )
+            }
+            .navigationTitle(book.title)
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(isEditing ? "Done" : "Edit") {
+                        if isEditing {
+                            guard saveEdits() else { return }
+                        } else {
+                            validationError = nil
+                        }
+                        isEditing.toggle()
                     }
-                    isEditing.toggle()
                 }
             }
+            .sheet(isPresented: $showDeleteSheet) {
+                DeleteCopiesSheet(book: book) { dismiss() }
+                    #if os(iOS)
+                    .presentationDetents([.medium])
+                    #endif
+            }
+    }
+
+    @ViewBuilder
+    private var detailForm: some View {
+        #if os(macOS)
+        // Grouped List scrolls reliably on Mac; Form often clips in NavigationSplitView.
+        List {
+            formContent
         }
-        .sheet(isPresented: $showDeleteSheet) {
-            DeleteCopiesSheet(book: book) { dismiss() }
-                .presentationDetents([.medium])
+        .formStyle(.grouped)
+        #else
+        Form {
+            formContent
         }
+        #endif
+    }
+
+    private var formContent: some View {
+        BookFormContent(
+            book: book,
+            location: locationBinding,
+            format: formatBinding,
+            bindingOption: bindingOptionBinding,
+            isEditing: isEditing,
+            isISBNEditable: book.isManualEntry,
+            listPriceEditable: book.isManualEntry,
+            showDelete: true,
+            validationError: validationError,
+            onDelete: { showDeleteSheet = true },
+            taxonomyPicker: $taxonomyPicker
+        )
     }
 
     private func saveEdits() -> Bool {

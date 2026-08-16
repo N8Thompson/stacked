@@ -25,12 +25,15 @@ final class SubscriptionService: SubscriptionProviding {
     static let shared = SubscriptionService()
 
     private(set) var isPlus = false
+    private(set) var hasComplimentaryPlus = false
+    private(set) var hasStoreSubscription = false
     private(set) var products: [Product] = []
     private(set) var purchaseError: String?
     private(set) var isLoading = false
 
     private var storeIsPlus = false
     private var updatesTask: Task<Void, Never>?
+    private var iCloudObserver: NSObjectProtocol?
 
     #if DEBUG
     private static let debugOverrideKey = "stacked.debugForcePlus"
@@ -41,12 +44,15 @@ final class SubscriptionService: SubscriptionProviding {
     #endif
 
     private init() {
+        PlusPromoCodeStore.refreshFromiCloud()
+        observeiCloudPromoUnlock()
         applyResolvedEntitlement()
     }
 
     func load() async {
         isLoading = true
         defer { isLoading = false }
+        PlusPromoCodeStore.refreshFromiCloud()
         do {
             products = try await Product.products(for: EntitlementPolicy.allProductIDs)
                 .sorted { $0.price < $1.price }
@@ -78,12 +84,21 @@ final class SubscriptionService: SubscriptionProviding {
 
     func restore() async {
         purchaseError = nil
+        PlusPromoCodeStore.refreshFromiCloud()
         do {
             try await AppStore.sync()
             await refreshEntitlements()
         } catch {
             purchaseError = error.localizedDescription
         }
+        applyResolvedEntitlement()
+    }
+
+    @discardableResult
+    func redeemPromoCode(_ raw: String) -> PlusPromoCode.RedeemResult {
+        let result = PlusPromoCodeStore.redeem(raw)
+        applyResolvedEntitlement()
+        return result
     }
 
     func refreshEntitlements() async {
@@ -96,6 +111,7 @@ final class SubscriptionService: SubscriptionProviding {
             }
         }
         storeIsPlus = entitled
+        PlusPromoCodeStore.refreshFromiCloud()
         applyResolvedEntitlement()
     }
 
@@ -107,13 +123,29 @@ final class SubscriptionService: SubscriptionProviding {
     #endif
 
     private func applyResolvedEntitlement() {
+        hasComplimentaryPlus = PlusPromoCodeStore.isUnlocked
+        hasStoreSubscription = storeIsPlus
         #if DEBUG
         if UserDefaults.standard.object(forKey: Self.debugOverrideKey) != nil {
             isPlus = UserDefaults.standard.bool(forKey: Self.debugOverrideKey)
             return
         }
         #endif
-        isPlus = storeIsPlus
+        isPlus = storeIsPlus || hasComplimentaryPlus
+    }
+
+    private func observeiCloudPromoUnlock() {
+        iCloudObserver = NotificationCenter.default.addObserver(
+            forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: NSUbiquitousKeyValueStore.default,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                PlusPromoCodeStore.refreshFromiCloud()
+                self?.applyResolvedEntitlement()
+            }
+        }
+        NSUbiquitousKeyValueStore.default.synchronize()
     }
 
     private func startListeningForUpdatesIfNeeded() {
