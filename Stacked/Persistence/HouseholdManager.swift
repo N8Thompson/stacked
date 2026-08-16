@@ -21,10 +21,18 @@ final class HouseholdManager {
 
     private init() {}
 
+    func restartObserving() {
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+        observers = []
+        startObservingIfNeeded()
+    }
+
     func startObservingIfNeeded() {
         guard observers.isEmpty else { return }
 
         let context = PersistenceController.shared.viewContext
+        let coordinator = PersistenceController.shared.container.persistentStoreCoordinator
+        let container = PersistenceController.shared.container
         let center = NotificationCenter.default
 
         let didSave = center.addObserver(
@@ -38,7 +46,7 @@ final class HouseholdManager {
 
         let remoteChange = center.addObserver(
             forName: .NSPersistentStoreRemoteChange,
-            object: PersistenceController.shared.container.persistentStoreCoordinator,
+            object: coordinator,
             queue: .main
         ) { [weak self] _ in
             self?.bumpLibraryRevision()
@@ -46,7 +54,7 @@ final class HouseholdManager {
 
         let cloudKitEvent = center.addObserver(
             forName: NSPersistentCloudKitContainer.eventChangedNotification,
-            object: PersistenceController.shared.container,
+            object: container,
             queue: .main
         ) { [weak self] _ in
             self?.bumpLibraryRevision()
@@ -65,12 +73,14 @@ final class HouseholdManager {
     }
 
     func refresh(in context: NSManagedObjectContext) {
+        activeHousehold = nil
         let request = Household.fetchRequest()
         request.sortDescriptors = [NSSortDescriptor(keyPath: \Household.createdAt, ascending: false)]
         let households = (try? context.fetch(request)) ?? []
 
         #if os(iOS)
-        if let sharedStore = PersistenceController.shared.sharedStore {
+        if PersistenceController.shared.usesCloudKit,
+           let sharedStore = PersistenceController.shared.sharedStore {
             activeHousehold = households.first { household in
                 persistentStore(for: household, in: context) == sharedStore
             }
@@ -115,7 +125,8 @@ final class HouseholdManager {
 
     func isSharedHousehold(_ household: Household, in context: NSManagedObjectContext) -> Bool {
         #if os(iOS)
-        guard let sharedStore = PersistenceController.shared.sharedStore else { return false }
+        guard PersistenceController.shared.usesCloudKit,
+              let sharedStore = PersistenceController.shared.sharedStore else { return false }
         return store(for: household, in: context) == sharedStore
         #else
         return false

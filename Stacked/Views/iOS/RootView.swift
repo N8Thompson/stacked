@@ -16,12 +16,10 @@ struct RootView: View {
 
     @State private var showMergeOnJoin = false
 
-    private var mainTabs: [AppTab] { AppTab.mainTabs }
-
     var body: some View {
         @Bindable var router = router
         TabView(selection: $router.selectedTab) {
-            ForEach(mainTabs) { tab in
+            ForEach(AppTab.allCases) { tab in
                 destination(for: tab)
                     .tabItem { Label(tab.title, systemImage: tab.systemImage) }
                     .tag(tab)
@@ -42,7 +40,6 @@ struct RootView: View {
         switch tab {
         case .home: HomeView()
         case .manage: ManageView()
-        case .cost: CostView()
         case .settings: SettingsView()
         }
     }

@@ -32,6 +32,11 @@ final class AddBookActions {
     var pendingSourceChange: SearchSource?
     var pendingSheetDismiss = false
 
+    /// Live results for the Bluetooth scanner session, newest first.
+    var scannerItems: [ScannerSessionItem] = []
+    private var lastScannerISBN = ""
+    private var lastScannerAt = Date.distantPast
+
     init(preselection: AddPreselection) {
         self.preselection = preselection
     }
@@ -67,9 +72,12 @@ final class AddBookActions {
         lastAPIQueryKey = ""
     }
 
+    var showPaywall = false
+    var paywallReason = "Stacked + unlocks more of your library."
+
     func isSourceEnabled(_ source: SearchSource) -> Bool {
         switch source {
-        case .text, .manual:
+        case .text, .manual, .scanner:
             return true
         case .scanText, .scanBarcode:
             #if os(iOS)
@@ -77,6 +85,20 @@ final class AddBookActions {
             #else
             return false
             #endif
+        }
+    }
+
+    func requestSourceChange(to option: SearchSource, isPlus: Bool) {
+        if option == .scanner && !isPlus {
+            presentPaywall("Bluetooth rapid scanning is included with Stacked +.")
+            return
+        }
+        guard option != source else { return }
+        if source == .manual && manualHasUnsavedChanges {
+            pendingSourceChange = option
+            showDiscardManualAlert = true
+        } else {
+            source = option
         }
     }
 
@@ -112,6 +134,16 @@ final class AddBookActions {
         }
     }
 
+    func presentPaywall(_ reason: String) {
+        paywallReason = reason
+        showPaywall = true
+    }
+
+    func uniqueTitleLimitReason() -> String {
+        "The free library includes \(EntitlementPolicy.freeUniqueTitleLimit) unique titles. Upgrade to Stacked + to add more. Your existing titles stay."
+    }
+
+    @discardableResult
     func add(
         result: BookSearchResult,
         count: Int,
@@ -119,12 +151,19 @@ final class AddBookActions {
         locations: [StorageLocation],
         formats: [ItemFormat],
         householdManager: HouseholdManager,
-        context: NSManagedObjectContext
-    ) {
+        context: NSManagedObjectContext,
+        isPlus: Bool
+    ) -> AddOutcome? {
+        let outcome: AddOutcome
         if let existing = books.first(where: { $0.isbn == result.isbn }) {
             existing.copies += Int32(count)
+            outcome = AddOutcome(isNewTitle: false, totalCopies: Int(existing.copies))
         } else {
-            guard let collection = householdManager.defaultCollection(in: context) else { return }
+            guard EntitlementPolicy.canAddUniqueTitle(isPlus: isPlus, currentUniqueTitles: books.count) else {
+                presentPaywall(uniqueTitleLimitReason())
+                return nil
+            }
+            guard let collection = householdManager.defaultCollection(in: context) else { return nil }
             let bindingOption: ItemBinding? = {
                 guard let name = result.binding, !name.isEmpty,
                       let household = householdManager.activeHousehold else { return nil }
@@ -147,11 +186,116 @@ final class AddBookActions {
                 format: bookFormat(from: formats),
                 bindingOption: bindingOption
             )
+            outcome = AddOutcome(isNewTitle: true, totalCopies: count)
         }
         PersistenceController.shared.save()
         #if os(iOS)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         #endif
+        return outcome
+    }
+
+    // MARK: Bluetooth scanner session
+
+    /// Handles one raw HID scan: normalize, look up, add (or increment copies),
+    /// and record a session item. Errors surface as a single replaceable card.
+    func processScannerInput(
+        _ raw: String,
+        locations: [StorageLocation],
+        formats: [ItemFormat],
+        householdManager: HouseholdManager,
+        context: NSManagedObjectContext,
+        provider: BookSearchProvider,
+        isPlus: Bool
+    ) async {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        guard let isbn = normalizedISBN(trimmed), isValidISBN(isbn) else {
+            recordScannerError(message: "That doesn't look like a book barcode.", scanned: trimmed)
+            return
+        }
+
+        // Guard against a single physical scan firing twice in quick succession,
+        // while still allowing an intentional re-scan to add another copy.
+        let now = Date()
+        if isbn == lastScannerISBN, now.timeIntervalSince(lastScannerAt) < 0.4 { return }
+        lastScannerISBN = isbn
+        lastScannerAt = now
+
+        do {
+            guard let result = try await provider.lookup(isbn: isbn) else {
+                recordScannerError(message: "No book found for \(isbn).", scanned: isbn)
+                return
+            }
+            let books = householdManager.allBooks(in: context)
+            guard let outcome = add(
+                result: result,
+                count: 1,
+                books: books,
+                locations: locations,
+                formats: formats,
+                householdManager: householdManager,
+                context: context,
+                isPlus: isPlus
+            ) else {
+                if showPaywall {
+                    recordScannerError(message: uniqueTitleLimitReason(), scanned: isbn)
+                } else {
+                    recordScannerError(message: "Couldn't add this book.", scanned: isbn)
+                }
+                return
+            }
+            let info = AddedBookInfo(
+                isbn: result.isbn,
+                title: result.title,
+                authors: result.authorsText,
+                coverURL: result.coverURL,
+                totalCopies: outcome.totalCopies,
+                isNewTitle: outcome.isNewTitle
+            )
+            removeScannerErrorCards()
+            scannerItems.insert(.added(info), at: 0)
+            ScannerFeedback.success()
+        } catch {
+            let message = (error as? BookSearchError)?.errorDescription
+                ?? "Lookup failed. Check your connection and try again."
+            recordScannerError(message: message, scanned: isbn)
+        }
+    }
+
+    /// Removes a session row. For an added book this also undoes one copy in the
+    /// library (deleting the title if it was the last copy).
+    func removeScannerItem(
+        _ item: ScannerSessionItem,
+        householdManager: HouseholdManager,
+        context: NSManagedObjectContext
+    ) {
+        if case .added(let info) = item {
+            let books = householdManager.allBooks(in: context)
+            if let book = books.first(where: { $0.isbn == info.isbn }) {
+                if book.copies > 1 {
+                    book.copies -= 1
+                } else {
+                    context.delete(book)
+                }
+                PersistenceController.shared.save()
+            }
+        }
+        scannerItems.removeAll { $0.id == item.id }
+    }
+
+    private func recordScannerError(message: String, scanned: String) {
+        removeScannerErrorCards()
+        scannerItems.insert(.failure(ScanErrorInfo(message: message, scannedText: scanned)), at: 0)
+        ScannerFeedback.failure()
+    }
+
+    private func removeScannerErrorCards() {
+        scannerItems.removeAll {
+            if case .failure = $0 { return true }
+            return false
+        }
     }
 
     func targetLocationName(locations: [StorageLocation]) -> String {
@@ -166,6 +310,8 @@ final class AddBookActions {
             return "Point the camera at a barcode on the back cover."
         case .scanText:
             return "Point the camera at the cover and tap recognized text to search."
+        case .scanner:
+            return "Connect your Bluetooth scanner and scan a book to add it."
         case .manual:
             return ""
         }
@@ -177,16 +323,6 @@ final class AddBookActions {
             showDiscardManualAlert = true
         } else {
             close(dismiss: dismiss)
-        }
-    }
-
-    func requestSourceChange(to option: SearchSource) {
-        guard option != source else { return }
-        if source == .manual && manualHasUnsavedChanges {
-            pendingSourceChange = option
-            showDiscardManualAlert = true
-        } else {
-            source = option
         }
     }
 

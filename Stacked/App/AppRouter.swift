@@ -11,7 +11,6 @@ import Foundation
 enum AppTab: Int, Hashable, CaseIterable, Identifiable {
     case home
     case manage
-    case cost
     case settings
 
     var id: Int { rawValue }
@@ -20,7 +19,6 @@ enum AppTab: Int, Hashable, CaseIterable, Identifiable {
         switch self {
         case .home: return "Home"
         case .manage: return "Library"
-        case .cost: return "Cost"
         case .settings: return "Settings"
         }
     }
@@ -29,7 +27,6 @@ enum AppTab: Int, Hashable, CaseIterable, Identifiable {
         switch self {
         case .home: return "house"
         case .manage: return "books.vertical"
-        case .cost: return "dollarsign.circle"
         case .settings: return "gearshape"
         }
     }

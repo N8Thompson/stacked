@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct BookTile: View {
-    let book: Book
+    @ObservedObject var book: Book
     var showFormatChip = false
     var showLocationChip = false
 
@@ -35,19 +35,11 @@ struct BookTile: View {
                         .foregroundStyle(.secondary)
                 }
 
-                HStack(spacing: 8) {
-                    if book.copies > 1 {
-                        Text("×\(book.copies)")
-                            .font(.caption.weight(.semibold))
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(Capsule().fill(.secondary.opacity(0.15)))
-                    }
-                    if appSettings.showCostTracking,
-                       let price = Formatters.money(book.effectiveUnitPrice > 0 ? book.effectiveUnitPrice : nil) {
-                        Text(price)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                if let priceLine = priceLine {
+                    Text(priceLine)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
 
                 if showFormatChip || showLocationChip {
@@ -65,6 +57,24 @@ struct BookTile: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+    }
+
+    private var priceLine: String? {
+        let copies = Int(book.copies)
+        let unit = book.effectiveUnitPrice
+        let showCost = appSettings.showCostTracking && unit > 0
+        if copies > 1 {
+            if showCost,
+               let total = Formatters.money(book.totalValue),
+               let each = Formatters.money(unit) {
+                return "\(copies) copies · \(total) total · \(each) each"
+            }
+            return "\(copies) copies"
+        }
+        if showCost {
+            return Formatters.money(unit)
+        }
+        return nil
     }
 
     private func metadataChip(_ title: String) -> some View {

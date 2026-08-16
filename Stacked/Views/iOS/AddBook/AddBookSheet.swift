@@ -15,6 +15,7 @@ struct AddBookSheet: View {
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(HouseholdManager.self) private var householdManager
+    @Environment(SubscriptionService.self) private var subscriptions
 
     @FocusState private var searchFieldFocused: Bool
     @State private var actions: AddBookActions
@@ -65,6 +66,9 @@ struct AddBookSheet: View {
         } message: {
             Text("You have unsaved changes to this manual entry.")
         }
+        .sheet(isPresented: $actions.showPaywall) {
+            PaywallView(reason: actions.paywallReason)
+        }
         .onAppear {
             actions.onDismiss = onDismiss
             actions.initTargetsIfNeeded(locations: locations)
@@ -77,21 +81,28 @@ struct AddBookSheet: View {
     @ViewBuilder
     private var searchContent: some View {
         VStack(spacing: 0) {
-            if actions.source != .text {
-                scannerArea
-                    .frame(height: actions.source == .scanBarcode ? 200 : 260)
-                    .padding(.horizontal)
-                    .padding(.top, 8)
+            if actions.source == .scanner {
+                targetBar
+
+                BluetoothScannerView(actions: actions, locations: locations, formats: formats)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            } else {
+                if actions.source == .scanBarcode || actions.source == .scanText {
+                    scannerArea
+                        .frame(height: actions.source == .scanBarcode ? 200 : 260)
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                }
+
+                if actions.source == .text {
+                    searchField
+                }
+
+                targetBar
+
+                resultsList
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
-
-            if actions.source == .text {
-                searchField
-            }
-
-            targetBar
-
-            resultsList
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
     }
 
@@ -112,7 +123,7 @@ struct AddBookSheet: View {
         let enabled = actions.isSourceEnabled(option)
         let selected = actions.source == option
         return Button {
-            actions.requestSourceChange(to: option)
+            actions.requestSourceChange(to: option, isPlus: subscriptions.isPlus)
         } label: {
             Text(option.segmentTitle)
                 .font(.subheadline.weight(selected ? .semibold : .medium))
@@ -259,7 +270,8 @@ struct AddBookSheet: View {
                             locations: locations,
                             formats: formats,
                             householdManager: householdManager,
-                            context: context
+                            context: context,
+                            isPlus: subscriptions.isPlus
                         )
                     }
                 }

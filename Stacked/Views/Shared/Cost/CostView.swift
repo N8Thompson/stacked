@@ -2,8 +2,7 @@
 //  CostView.swift
 //  Stacked
 //
-//  Aggregate value of the collection with a per-location breakdown and
-//  PDF / CSV export suitable for renter's or homeowner's insurance.
+//  Aggregate value of the collection with a per-location breakdown.
 //
 
 import SwiftUI
@@ -12,27 +11,19 @@ struct CostView: View {
     @Environment(HouseholdManager.self) private var householdManager
     @Environment(\.managedObjectContext) private var context
 
-    @State private var pdfURL: URL?
-    @State private var csvURL: URL?
-    @State private var exportError: String?
-
     private var books: [Book] { householdManager.allBooks(in: context) }
     private var locations: [StorageLocation] { householdManager.locations }
 
     var body: some View {
-        NavigationStack {
-            List {
-                totalsSection
-                breakdownSection
-                exportSection
-                if let exportError {
-                    Section { Text(exportError).foregroundStyle(StackedTheme.Semantic.destructive).font(.footnote) }
-                }
-            }
-            .scrollContentBackground(.hidden)
-            .navigationTitle("Cost")
-            .task(id: signature) { regenerateExports() }
+        List {
+            totalsSection
+            breakdownSection
         }
+        .scrollContentBackground(.hidden)
+        .navigationTitle("Cost")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
     }
 
     // MARK: Totals
@@ -106,48 +97,6 @@ struct CostView: View {
                 Text("\(copies) \(copies == 1 ? "copy" : "copies")")
                     .font(.caption).foregroundStyle(.secondary)
             }
-        }
-    }
-
-    // MARK: Export
-
-    private var exportSection: some View {
-        Section {
-            if let pdfURL {
-                ShareLink(item: pdfURL) {
-                    Label("Export PDF report", systemImage: "doc.richtext")
-                }
-            }
-            if let csvURL {
-                ShareLink(item: csvURL) {
-                    Label("Export CSV spreadsheet", systemImage: "tablecells")
-                }
-            }
-        } header: {
-            Text("Export")
-        } footer: {
-            Text("Share a full inventory with values — useful for renter's or homeowner's insurance.")
-        }
-        .disabled(books.isEmpty)
-    }
-
-    // MARK: Regeneration
-
-    private var signature: String {
-        "\(books.count)-\(totalCopies)-\(estimatedTotal)-\(costTotal)"
-    }
-
-    private func regenerateExports() {
-        guard !books.isEmpty else {
-            pdfURL = nil; csvURL = nil
-            return
-        }
-        do {
-            pdfURL = try ExportService.writePDF(books)
-            csvURL = try ExportService.writeCSV(books)
-            exportError = nil
-        } catch {
-            exportError = "Couldn't generate export: \(error.localizedDescription)"
         }
     }
 }

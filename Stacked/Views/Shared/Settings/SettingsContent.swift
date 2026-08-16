@@ -7,29 +7,32 @@
 
 import SwiftUI
 import CoreData
-import UniformTypeIdentifiers
-import CloudKit
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 struct SettingsContent: View {
     @Binding var editor: NameEditorTarget?
     @Binding var deleteRequest: TaxonomyDeleteRequest?
     @Binding var taxonomyError: String?
+    @Binding var sheet: SettingsSheet?
 
     @Environment(\.managedObjectContext) private var context
     @Environment(AppSettings.self) private var appSettings
     @Environment(HouseholdManager.self) private var householdManager
     @Environment(CloudKitIdentityService.self) private var identity
     @Environment(HouseholdSharingService.self) private var sharingService
+    @Environment(SubscriptionService.self) private var subscriptions
 
-    @State private var showSharing = false
-    @State private var share: CKShare?
-    @State private var exportURL: URL?
-    @State private var showExportShare = false
-    @State private var showImporter = false
-    @State private var migrationPreview: MigrationPreview?
-    @State private var migrationError: String?
-    @State private var showExportBeforeLeave = false
-    @State private var isSharedParticipant = false
+    @State private var persistenceError: String?
+    @State private var showDisconnectConfirm = false
+    @State private var showReconnectOptions = false
+    @State private var showLeaveAndKeepCopy = false
+    #if os(iOS)
+    @State private var isOpeningUserManagement = false
+    #endif
 
     private var locations: [StorageLocation] { householdManager.locations }
     private var formats: [ItemFormat] { householdManager.formats }
@@ -38,55 +41,40 @@ struct SettingsContent: View {
 
     var body: some View {
         settingsSections
-            .sheet(isPresented: $showSharing) {
-                #if os(iOS)
-                if let share {
-                    HouseholdCloudSharingView(
-                        share: share,
-                        container: CKContainer(identifier: PersistenceController.cloudKitContainerID)
-                    )
+            .alert("Use only on this device?", isPresented: $showDisconnectConfirm) {
+                Button("Keep a local copy") {
+                    disconnectToLocal()
                 }
-                #endif
-            }
-            .sheet(isPresented: $showExportShare) {
-                if let exportURL {
-                    ExportShareSheet(items: [exportURL])
-                }
-            }
-            .fileImporter(
-                isPresented: $showImporter,
-                allowedContentTypes: [.json, LibraryMigrationService.exportType],
-                allowsMultipleSelection: false
-            ) { result in
-                handleImportPicker(result)
-            }
-            .sheet(item: $migrationPreview) { preview in
-                MigrationPreviewSheet(preview: preview) {
-                    applyImport(preview)
-                }
-            }
-            .alert("Export before leaving?", isPresented: $showExportBeforeLeave) {
-                Button("Export library") {
-                    exportLibrary()
-                    leaveHousehold()
-                }
-                Button("Leave without exporting", role: .destructive) {
-                    leaveHousehold()
-                }
-                Button("Cancel", role: .cancel) { }
+                Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Export a full copy of the household library before you go. You can delete unwanted titles after importing elsewhere.")
+                Text("Future changes will stay on this iPhone. Your iCloud copy is not deleted. Other devices will keep the last synced version until you reconnect.")
             }
-            .alert("Migration failed", isPresented: Binding(
-                get: { migrationError != nil },
-                set: { if !$0 { migrationError = nil } }
+            .alert("Reconnect iCloud?", isPresented: $showReconnectOptions) {
+                Button("Merge this device into iCloud") {
+                    reconnectMerging()
+                }
+                Button("Discard local changes and use iCloud", role: .destructive) {
+                    reconnectDiscarding()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Merging adds this device's titles to iCloud. Matching ISBNs become extra copies.")
+            }
+            .alert("Leave and keep a copy?", isPresented: $showLeaveAndKeepCopy) {
+                Button("Leave and keep a local copy", role: .destructive) {
+                    leaveAndKeepLocalCopy()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("You're viewing someone else's shared collection. Stacked will copy it to this device and then remove your access.")
+            }
+            .alert("Couldn't update library", isPresented: Binding(
+                get: { persistenceError != nil },
+                set: { if !$0 { persistenceError = nil } }
             )) {
-                Button("OK", role: .cancel) { migrationError = nil }
+                Button("OK", role: .cancel) { persistenceError = nil }
             } message: {
-                Text(migrationError ?? "")
-            }
-            .task(id: household?.objectID) {
-                await refreshParticipantStatus()
+                Text(persistenceError ?? "")
             }
     }
 
@@ -94,23 +82,101 @@ struct SettingsContent: View {
     var settingsSections: some View {
         #if os(macOS)
         VStack(alignment: .leading, spacing: 16) {
+            subscriptionSection
             iCloudSection
             householdSection
-            migrationSection
+            collectionSection
             costSection
             locationsSection
             formatsSection
             bindingsSection
+            aboutSection
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         #else
+        subscriptionSection
         iCloudSection
         householdSection
-        migrationSection
+        collectionSection
         costSection
         locationsSection
         formatsSection
         bindingsSection
+        aboutSection
+        #endif
+    }
+
+    @ViewBuilder
+    private var subscriptionSection: some View {
+        #if os(macOS)
+        settingsCard(
+            title: "Stacked +",
+            footer: plusFooter
+        ) {
+            settingsRow(title: "Status", value: plusStatusLabel)
+            cardDivider()
+            if subscriptions.isPlus {
+                cardButton(title: "Manage subscription", systemImage: "creditcard") {
+                    openManageSubscriptions()
+                }
+            } else {
+                cardButton(title: "Upgrade to Stacked +", systemImage: "star") {
+                    presentPaywall("Stacked + unlocks unlimited titles, more locations, cost tracking, and collection sharing.")
+                }
+            }
+            cardDivider()
+            cardButton(title: "Restore purchases", systemImage: "arrow.clockwise") {
+                Task { await subscriptions.restore() }
+            }
+            #if DEBUG
+            cardDivider()
+            cardButton(
+                title: subscriptions.isPlus ? "Simulate Free tier" : "Simulate Plus",
+                systemImage: "ladybug"
+            ) {
+                subscriptions.setDebugPlus(!subscriptions.isPlus)
+            }
+            #endif
+        }
+        #else
+        Section {
+            LabeledContent("Status") {
+                Text(plusStatusLabel)
+                    .foregroundStyle(StackedTheme.Text.secondary)
+            }
+            if subscriptions.isPlus {
+                Button {
+                    openManageSubscriptions()
+                } label: {
+                    Label("Manage subscription", systemImage: "creditcard")
+                }
+            } else {
+                Button {
+                    presentPaywall("Stacked + unlocks unlimited titles, more locations, cost tracking, and collection sharing.")
+                } label: {
+                    Label("Upgrade to Stacked +", systemImage: "star")
+                }
+            }
+            Button {
+                Task { await subscriptions.restore() }
+            } label: {
+                Label("Restore purchases", systemImage: "arrow.clockwise")
+            }
+            #if DEBUG
+            Button {
+                subscriptions.setDebugPlus(!subscriptions.isPlus)
+            } label: {
+                Label(
+                    subscriptions.isPlus ? "Simulate Free tier" : "Simulate Plus",
+                    systemImage: "ladybug"
+                )
+            }
+            #endif
+        } header: {
+            Text("Stacked +")
+        } footer: {
+            Text(plusFooter)
+        }
         #endif
     }
 
@@ -119,9 +185,9 @@ struct SettingsContent: View {
         #if os(macOS)
         settingsCard(
             title: "iCloud",
-            footer: "The Mac app keeps your library on this device. Use Export library to move it, or open Stacked on iPhone or iPad for iCloud sync and household sharing."
+            footer: "The Mac app keeps your library on this Mac. Use Move or share collection to copy it, or open Stacked on iPhone for iCloud sync and user management."
         ) {
-            settingsRow(title: "Sync", value: "This Mac")
+            settingsRow(title: "Library", value: "This Mac")
         }
         #else
         Section {
@@ -129,16 +195,30 @@ struct SettingsContent: View {
                 Text(identity.isSignedIn ? "Signed in" : "Not signed in")
                     .foregroundStyle(identity.isSignedIn ? StackedTheme.Text.secondary : StackedTheme.Semantic.destructive)
             }
-            if identity.isSignedIn {
-                LabeledContent("Sync") {
-                    Text("Active")
-                        .foregroundStyle(StackedTheme.Text.secondary)
+            LabeledContent("Library") {
+                Text(libraryLocationLabel)
+                    .foregroundStyle(StackedTheme.Text.secondary)
+            }
+            switch disconnectKind {
+            case .disconnectToLocal:
+                Button("Use only on this device") {
+                    showDisconnectConfirm = true
                 }
+            case .leaveAndKeepLocalCopy:
+                Button("Leave and keep a local copy") {
+                    showLeaveAndKeepCopy = true
+                }
+            case .reconnect:
+                Button("Reconnect iCloud") {
+                    showReconnectOptions = true
+                }
+            case .notAvailable:
+                EmptyView()
             }
         } header: {
             Text("iCloud")
         } footer: {
-            Text("Your library syncs through iCloud. Sign in under Settings → Apple ID to back up and share.")
+            Text(iCloudFooter)
         }
         #endif
     }
@@ -146,81 +226,62 @@ struct SettingsContent: View {
     @ViewBuilder
     private var householdSection: some View {
         #if os(macOS)
-        if let household {
-            settingsCard(
-                title: "Household",
-                footer: "Household sharing is available on iPhone and iPad."
-            ) {
-                settingsRow(title: "Household", value: household.name)
-                if sharingService.pendingMergeAfterJoin {
-                    cardDivider()
-                    cardButton(title: "Add my books to household", systemImage: "books.vertical") {
-                        contributePrivateLibrary()
-                    }
-                }
-            }
+        settingsCard(
+            title: "Users",
+            footer: "User management is available on iPhone. On Mac, send a Stacked backup from Move or share collection."
+        ) {
+            settingsRow(title: "User management", value: "iPhone only")
         }
         #else
         Section {
-            if let household {
-                LabeledContent("Household") {
-                    Text(household.name)
-                }
-                Button {
-                    Task { await inviteToHousehold(household) }
-                } label: {
-                    Label("Invite to household", systemImage: "person.badge.plus")
-                }
-                if sharingService.pendingMergeAfterJoin {
-                    Button("Add my books to household") {
-                        contributePrivateLibrary()
+            Button {
+                Task { await openUserManagement() }
+            } label: {
+                if isOpeningUserManagement {
+                    HStack {
+                        ProgressView()
+                        Text("Opening user management…")
                     }
+                } else {
+                    Label("User management", systemImage: "person.2")
                 }
-                if isSharedParticipant {
-                    Button("Leave household", role: .destructive) {
-                        showExportBeforeLeave = true
-                    }
+            }
+            .disabled(isOpeningUserManagement)
+            if sharingService.pendingMergeAfterJoin {
+                Button("Add my books to shared collection") {
+                    contributePrivateLibrary()
                 }
             }
         } header: {
-            Text("Household")
+            Text("Users")
         } footer: {
-            Text("Invite your partner so you share one library and avoid buying the same book twice.")
+            Text("All users have full access to manage and contribute to the collection. Only the owner can add or remove additional users.")
         }
         #endif
     }
 
     @ViewBuilder
-    private var migrationSection: some View {
+    private var collectionSection: some View {
         #if os(macOS)
         settingsCard(
-            title: "Move your library",
-            footer: "Export or import a complete copy of your library to move it between Stacked users. Imported books will show you as the adder. No book lookup is performed on import."
+            title: "Collection",
+            footer: "Send a Stacked backup, import one, or export a CSV. Live sharing is in User management."
         ) {
-            cardButton(title: "Export library", systemImage: "square.and.arrow.up") {
-                exportLibrary()
-            }
-            cardDivider()
-            cardButton(title: "Import library", systemImage: "square.and.arrow.down") {
-                showImporter = true
+            cardButton(title: "Move or share collection", systemImage: "square.and.arrow.up.on.square") {
+                sheet = .assistant
             }
         }
         #else
         Section {
             Button {
-                exportLibrary()
+                sheet = .assistant
             } label: {
-                Label("Export library", systemImage: "square.and.arrow.up")
-            }
-            Button {
-                showImporter = true
-            } label: {
-                Label("Import library", systemImage: "square.and.arrow.down")
+                Label("Move or share collection", systemImage: "square.and.arrow.up.on.square")
             }
         } header: {
-            Text("Move your library")
+            Text("Collection")
         } footer: {
-            Text("Export or import a complete copy of your library to move it between Stacked users. Imported books will show you as the adder. No book lookup is performed on import.")
+            Text("Send a Stacked backup, import one, or export a CSV. Live sharing is in User management.")
         }
         #endif
     }
@@ -230,51 +291,59 @@ struct SettingsContent: View {
         #if os(macOS)
         settingsCard(
             title: "Cost",
-            footer: "This will allow you to see costs associated with your collection and include them when exporting your library."
+            footer: costFooter
         ) {
-            Toggle(
-                "Track item costs",
-                isOn: Binding(
-                    get: { appSettings.showCostTracking },
-                    set: { appSettings.showCostTracking = $0 }
+            if subscriptions.isPlus {
+                Toggle(
+                    "Track item costs",
+                    isOn: Binding(
+                        get: { appSettings.costTrackingPreference },
+                        set: { appSettings.costTrackingPreference = $0 }
+                    )
                 )
-            )
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-
-            if appSettings.showCostTracking {
-                cardDivider()
-                NavigationLink {
-                    CostView()
-                } label: {
-                    Label("Cost information", systemImage: "dollarsign.circle")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.plain)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
+
+                if appSettings.showCostTracking {
+                    cardDivider()
+                    cardButton(title: "Cost information", systemImage: "dollarsign.circle") {
+                        sheet = .cost
+                    }
+                }
+            } else {
+                cardButton(title: "Unlock cost tracking", systemImage: "lock") {
+                    presentPaywall("Cost tracking is included with Stacked +.")
+                }
             }
         }
         #else
         Section {
-            Toggle(
-                "Track item costs",
-                isOn: Binding(
-                    get: { appSettings.showCostTracking },
-                    set: { appSettings.showCostTracking = $0 }
+            if subscriptions.isPlus {
+                Toggle(
+                    "Track item costs",
+                    isOn: Binding(
+                        get: { appSettings.costTrackingPreference },
+                        set: { appSettings.costTrackingPreference = $0 }
+                    )
                 )
-            )
-            if appSettings.showCostTracking {
-                NavigationLink {
-                    CostView()
+                if appSettings.showCostTracking {
+                    Button {
+                        sheet = .cost
+                    } label: {
+                        Label("Cost information", systemImage: "dollarsign.circle")
+                    }
+                }
+            } else {
+                Button {
+                    presentPaywall("Cost tracking is included with Stacked +.")
                 } label: {
-                    Label("Cost information", systemImage: "dollarsign.circle")
+                    Label("Unlock cost tracking", systemImage: "lock")
                 }
             }
         } header: {
             Text("Cost")
         } footer: {
-            Text("This will allow you to see costs associated with your collection and include them when exporting your library.")
+            Text(costFooter)
         }
         #endif
     }
@@ -300,7 +369,7 @@ struct SettingsContent: View {
             }
             cardDivider()
             cardButton(title: "Add location", systemImage: "plus") {
-                editor = addLocation()
+                requestAddLocation()
             }
         }
         #else
@@ -314,7 +383,7 @@ struct SettingsContent: View {
                     onDelete: locations.count > 1 ? { requestDeleteLocation(location) } : nil
                 )
             }
-            Button { editor = addLocation() } label: {
+            Button { requestAddLocation() } label: {
                 Label("Add location", systemImage: "plus")
             }
         } header: {
@@ -413,6 +482,27 @@ struct SettingsContent: View {
             Text("Bindings")
         } footer: {
             Text("Physical edition (e.g. Paperback, Hardcover, Spiral).")
+        }
+        #endif
+    }
+
+    @ViewBuilder
+    private var aboutSection: some View {
+        #if os(macOS)
+        settingsCard(title: "About") {
+            cardButton(title: "FAQs", systemImage: "questionmark.circle") {
+                sheet = .faqs
+            }
+        }
+        #else
+        Section {
+            Button {
+                sheet = .faqs
+            } label: {
+                Label("FAQs", systemImage: "questionmark.circle")
+            }
+        } header: {
+            Text("About")
         }
         #endif
     }
@@ -537,17 +627,81 @@ struct SettingsContent: View {
     }
     #endif
 
-    #if os(iOS)
-    private func inviteToHousehold(_ household: Household) async {
-        do {
-            let newShare = try await sharingService.createShare(for: household)
-            share = newShare
-            showSharing = true
-        } catch {
-            migrationError = error.localizedDescription
+    private var libraryLocationLabel: String {
+        PersistenceController.shared.mode == .local ? "This iPhone" : "iCloud"
+    }
+
+    private var disconnectKind: PersistenceSwitchPolicy.DisconnectKind {
+        PersistenceSwitchPolicy.disconnectKind(
+            mode: PersistenceController.shared.mode,
+            role: sharingService.currentRole,
+            usesCloudKit: PersistenceController.shared.usesCloudKit
+        )
+    }
+
+    private var iCloudFooter: String {
+        switch disconnectKind {
+        case .reconnect:
+            return "This iPhone has a local copy. iCloud is not being updated. Reconnect to merge this device into iCloud, or discard local changes and use iCloud."
+        case .leaveAndKeepLocalCopy:
+            return "You're viewing someone else's shared collection. Leave and keep a local copy if you want the titles on this iPhone. Leaving removes your access; the owner's collection stays."
+        case .disconnectToLocal:
+            return "Your library lives in iCloud and syncs to your other devices. Use only on this device keeps a copy here without deleting iCloud."
+        case .notAvailable:
+            return "Sign in under Settings → Apple ID to back up and share."
         }
     }
-    #endif
+
+    private var plusStatusLabel: String {
+        #if DEBUG
+        if subscriptions.hasDebugPlusOverride {
+            return subscriptions.isPlus ? "Subscribed (simulated)" : "Free (simulated)"
+        }
+        #endif
+        return subscriptions.isPlus ? "Subscribed" : "Free"
+    }
+
+    private var plusFooter: String {
+        let status = subscriptions.isPlus
+            ? "Stacked + is active on this Apple Account and works on iPhone and Mac."
+            : "Free libraries include \(EntitlementPolicy.freeUniqueTitleLimit) unique titles and \(EntitlementPolicy.freeLocationLimit) locations. Existing titles stay if a subscription ends."
+        #if DEBUG
+        return status + " Simulate Plus is a debug control and overrides App Store status on this device."
+        #else
+        return status
+        #endif
+    }
+
+    private var costFooter: String {
+        if subscriptions.isPlus {
+            return "Show costs associated with your collection in the library and on Cost information."
+        }
+        return "Cost tracking is included with Stacked +. Your existing prices are kept and never deleted."
+    }
+
+    private func presentPaywall(_ reason: String) {
+        sheet = .paywall(reason)
+    }
+
+    private func requestAddLocation() {
+        if EntitlementPolicy.canAddLocation(isPlus: subscriptions.isPlus, currentLocations: locations.count) {
+            editor = addLocation()
+        } else {
+            presentPaywall("The free library includes \(EntitlementPolicy.freeLocationLimit) locations. Upgrade to add more. Your existing locations stay.")
+        }
+    }
+
+    private func openManageSubscriptions() {
+        #if os(iOS)
+        if let url = URL(string: "https://apps.apple.com/account/subscriptions") {
+            UIApplication.shared.open(url)
+        }
+        #else
+        if let url = URL(string: "https://apps.apple.com/account/subscriptions") {
+            NSWorkspace.shared.open(url)
+        }
+        #endif
+    }
 
     private func contributePrivateLibrary() {
         guard let household,
@@ -556,72 +710,63 @@ struct SettingsContent: View {
         sharingService.pendingMergeAfterJoin = false
     }
 
-    private func refreshParticipantStatus() async {
-        #if os(iOS)
-        guard let household else {
-            isSharedParticipant = false
-            return
-        }
-        guard householdManager.isSharedHousehold(household, in: context) else {
-            isSharedParticipant = false
-            return
-        }
-        isSharedParticipant = !(await sharingService.isOwner(of: household))
-        #else
-        isSharedParticipant = false
-        #endif
-    }
+    #if os(iOS)
+    private func openUserManagement() async {
+        guard !isOpeningUserManagement, let household else { return }
+        isOpeningUserManagement = true
+        defer { isOpeningUserManagement = false }
 
-    private func leaveHousehold() {
-        #if os(iOS)
-        guard let household else { return }
+        do {
+            let presented = try await sharingService.presentUserManagement(
+                for: household,
+                isPlus: subscriptions.isPlus
+            )
+            if !presented {
+                presentPaywall("Sharing a collection with other users is included with Stacked +.")
+            }
+        } catch {
+            persistenceError = error.localizedDescription
+        }
+    }
+    #endif
+
+    private func disconnectToLocal() {
         Task {
             do {
-                try await sharingService.leaveSharedHousehold(household)
+                try await PersistenceSwitchService.copyActiveLibraryToLocalStore()
             } catch {
-                migrationError = error.localizedDescription
+                persistenceError = error.localizedDescription
+            }
+        }
+    }
+
+    private func reconnectMerging() {
+        Task {
+            do {
+                try await PersistenceSwitchService.mergeLocalLibraryIntoiCloud()
+            } catch {
+                persistenceError = error.localizedDescription
+            }
+        }
+    }
+
+    private func reconnectDiscarding() {
+        Task {
+            await PersistenceSwitchService.discardLocalAndUseiCloud()
+        }
+    }
+
+    private func leaveAndKeepLocalCopy() {
+        #if os(iOS)
+        Task {
+            do {
+                guard let household else { return }
+                try await PersistenceSwitchService.leaveShareAndKeepLocalCopy(household)
+            } catch {
+                persistenceError = error.localizedDescription
             }
         }
         #endif
-    }
-
-    private func exportLibrary() {
-        guard let household else { return }
-        do {
-            exportURL = try LibraryMigrationService.exportHousehold(household, context: context)
-            showExportShare = true
-        } catch {
-            migrationError = error.localizedDescription
-        }
-    }
-
-    private func handleImportPicker(_ result: Result<[URL], Error>) {
-        switch result {
-        case .failure(let error):
-            migrationError = error.localizedDescription
-        case .success(let urls):
-            guard let url = urls.first else { return }
-            guard url.startAccessingSecurityScopedResource() else {
-                migrationError = "Could not access the selected file."
-                return
-            }
-            defer { url.stopAccessingSecurityScopedResource() }
-            do {
-                migrationPreview = try LibraryMigrationService.previewImport(from: url)
-            } catch {
-                migrationError = error.localizedDescription
-            }
-        }
-    }
-
-    private func applyImport(_ preview: MigrationPreview) {
-        guard let household else { return }
-        do {
-            try LibraryMigrationService.applyImport(preview, into: household, context: context)
-            migrationPreview = nil
-        } catch {
-            migrationError = error.localizedDescription
-        }
     }
 
     private func addLocation() -> NameEditorTarget {
@@ -751,8 +896,4 @@ struct SettingsContent: View {
         }
         PersistenceController.shared.save()
     }
-}
-
-extension MigrationPreview: Identifiable {
-    var id: String { "\(uniqueTitles)-\(totalCopies)-\(locationCount)" }
 }

@@ -2,14 +2,15 @@
 //  LibraryMigrationService.swift
 //  Stacked
 //
-//  Full-fidelity JSON export/import for moving libraries between Stacked users.
+//  Full-fidelity JSON backup/import plus portable CSV export.
 //
 
 import CoreData
 import Foundation
 import UniformTypeIdentifiers
 
-struct MigrationPreview {
+struct MigrationPreview: Identifiable {
+    let id = UUID()
     var uniqueTitles: Int
     var totalCopies: Int
     var locationCount: Int
@@ -59,12 +60,56 @@ struct ExportBook: Codable {
 }
 
 enum LibraryMigrationService {
-    static let exportType = UTType(filenameExtension: "stackedlibrary") ?? .json
+    static let exportType = UTType.stackedLibrary
+    static let portableCSVHeader = [
+        "Title", "Authors", "ISBN", "Publisher", "Published Year", "Format",
+        "Binding", "Location", "Copies", "List Price", "Actual Cost", "Rating", "Notes",
+    ]
 
     @MainActor
     static func exportHousehold(_ household: Household, context: NSManagedObjectContext) throws -> URL {
+        let payload = try backupPayload(household, context: context)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(payload)
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Stacked-Library-\(fileTimestamp()).stackedlibrary")
+        try data.write(to: url)
+        return url
+    }
+
+    @MainActor
+    static func portableCSVURL(_ household: Household, context: NSManagedObjectContext) throws -> URL {
         let books = HouseholdManager.shared.allBooks(in: context)
-        let payload = LibraryExportPayload(
+        var rows = [CSVEscaping.row(portableCSVHeader)]
+        for book in books.sorted(by: { $0.title < $1.title }) {
+            rows.append(CSVEscaping.row([
+                book.title,
+                book.authors,
+                book.isbn,
+                book.publisher,
+                book.publishedYearValue.map(String.init) ?? "",
+                book.format?.name ?? "",
+                book.bindingOption?.name ?? "",
+                book.location?.name ?? "",
+                String(Int(book.copies)),
+                String(format: "%.2f", book.listPrice),
+                book.actualCostValue.map { String(format: "%.2f", $0) } ?? "",
+                book.rating > 0 ? String(format: "%.1f", book.rating) : "",
+                book.reviewNotes,
+            ]))
+        }
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Stacked-Library-\(fileTimestamp()).csv")
+        try Data(rows.joined(separator: "\n").utf8).write(to: url)
+        return url
+    }
+
+    @MainActor
+    static func backupPayload(_ household: Household, context: NSManagedObjectContext) throws -> LibraryExportPayload {
+        let books = HouseholdManager.shared.allBooks(in: context)
+        return LibraryExportPayload(
             stackedLibraryExport: LibraryExportRoot(
                 version: 1,
                 exportedAt: Date(),
@@ -78,18 +123,14 @@ enum LibraryMigrationService {
                 books: books.map(exportBook)
             )
         )
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(payload)
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Stacked-Library-\(ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")).stackedlibrary")
-        try data.write(to: url)
-        return url
     }
 
     static func previewImport(from url: URL) throws -> MigrationPreview {
         let data = try Data(contentsOf: url)
+        return try previewImport(from: data)
+    }
+
+    static func previewImport(from data: Data) throws -> MigrationPreview {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let payload = try decoder.decode(LibraryExportPayload.self, from: data)
@@ -202,4 +243,12 @@ enum LibraryMigrationService {
         request.fetchLimit = 1
         return try? context.fetch(request).first
     }
+
+    private static func fileTimestamp() -> String {
+        ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+    }
+}
+
+extension UTType {
+    static let stackedLibrary = UTType(exportedAs: "com.thompson.Stacked.library")
 }

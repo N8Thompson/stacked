@@ -15,6 +15,7 @@ struct AddBookSheet: View {
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(HouseholdManager.self) private var householdManager
+    @Environment(SubscriptionService.self) private var subscriptions
 
     @FocusState private var searchFieldFocused: Bool
     @State private var actions: AddBookActions
@@ -52,6 +53,10 @@ struct AddBookSheet: View {
                     }
                 }
                 .frame(maxHeight: .infinity)
+            } else if actions.source == .scanner {
+                BluetoothScannerView(actions: actions, locations: locations, formats: formats)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .padding(.bottom, 12)
             } else {
                 searchField
                     .padding(.horizontal, 16)
@@ -74,6 +79,9 @@ struct AddBookSheet: View {
         } message: {
             Text("You have unsaved changes to this manual entry.")
         }
+        .sheet(isPresented: $actions.showPaywall) {
+            PaywallView(reason: actions.paywallReason)
+        }
         .onAppear {
             actions.onDismiss = onDismiss
             actions.initTargetsIfNeeded(locations: locations)
@@ -87,7 +95,7 @@ struct AddBookSheet: View {
 
     private var headerRow: some View {
         HStack(alignment: .center, spacing: 12) {
-            if actions.source == .text {
+            if actions.source == .text || actions.source == .scanner {
                 targetLocationLabel
             }
 
@@ -129,7 +137,7 @@ struct AddBookSheet: View {
     private var segmentedPicker: some View {
         Picker("Add method", selection: Binding(
             get: { actions.source },
-            set: { actions.requestSourceChange(to: $0) }
+            set: { actions.requestSourceChange(to: $0, isPlus: subscriptions.isPlus) }
         )) {
             ForEach(SearchSource.addSheetSources) { option in
                 Text(option.segmentTitle).tag(option)
@@ -198,7 +206,8 @@ struct AddBookSheet: View {
                             locations: locations,
                             formats: formats,
                             householdManager: householdManager,
-                            context: context
+                            context: context,
+                            isPlus: subscriptions.isPlus
                         )
                     }
                     .listRowBackground(StackedTheme.Surface.primary)

@@ -33,13 +33,30 @@ struct DeleteCopiesSheet: View {
                         .multilineTextAlignment(.center)
                     CountStepper(count: $removeCount, range: 1...copyCount)
 
-                    Button(role: .destructive) {
-                        removeCopies()
-                    } label: {
-                        Text(removeCount >= copyCount ? "Delete entire entry" : "Remove \(removeCount) cop\(removeCount == 1 ? "y" : "ies")")
-                            .frame(maxWidth: .infinity)
+                    if CopyDeletionPolicy.showsCollapsedRemoveAll(copyCount: copyCount, removeCount: removeCount) {
+                        Button(role: .destructive) {
+                            confirmDeleteAll = true
+                        } label: {
+                            Text("Remove all copies")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else {
+                        Button(role: .destructive) {
+                            removeCopies()
+                        } label: {
+                            Text("Remove \(removeCount) cop\(removeCount == 1 ? "y" : "ies")")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        Button(role: .destructive) {
+                            confirmDeleteAll = true
+                        } label: {
+                            Text("Remove all copies")
+                                .frame(maxWidth: .infinity)
+                        }
                     }
-                    .buttonStyle(.borderedProminent)
                 } else {
                     Text("This will permanently remove the item from your library.")
                         .font(.subheadline)
@@ -64,18 +81,21 @@ struct DeleteCopiesSheet: View {
                     Button("Cancel") { dismiss() }
                 }
             }
-            .alert("Delete this item?", isPresented: $confirmDeleteAll) {
-                Button("Delete", role: .destructive) { deleteEntire() }
+            .alert("Remove all copies?", isPresented: $confirmDeleteAll) {
+                Button("Remove all", role: .destructive) { deleteEntire() }
                 Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This permanently removes this title from your library.")
             }
         }
     }
 
     private func removeCopies() {
-        if removeCount >= copyCount {
+        switch CopyDeletionPolicy.action(copyCount: copyCount, removeCount: removeCount) {
+        case .deleteEntry:
             confirmDeleteAll = true
-        } else {
-            book.copies -= Int32(removeCount)
+        case .removeCopies(let count):
+            book.copies -= Int32(count)
             PersistenceController.shared.save()
             dismiss()
         }

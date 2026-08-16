@@ -2,7 +2,7 @@
 //  MergeOnJoinSheet.swift
 //  Stacked
 //
-//  Shown after accepting a household invite when the user still has books locally.
+//  Shown after accepting a collection invite when the user still has books locally.
 //
 
 import SwiftUI
@@ -22,7 +22,7 @@ struct MergeOnJoinSheet: View {
                 Text("You have \(bookCount) \(bookCount == 1 ? "book" : "books") in your personal library.")
                     .font(.headline)
 
-                Text("Add them to the household so everyone can see what you already own, or start fresh and keep them separate for now.")
+                Text("Add them to the shared collection so every user can see what you already own, or start fresh and keep them separate for now.")
                     .font(.subheadline)
                     .foregroundStyle(StackedTheme.Text.secondary)
 
@@ -30,7 +30,7 @@ struct MergeOnJoinSheet: View {
                     Button {
                         mergeIntoHousehold()
                     } label: {
-                        Text("Add my books to household")
+                        Text("Add my books to shared collection")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
@@ -53,7 +53,7 @@ struct MergeOnJoinSheet: View {
                 Spacer()
             }
             .padding()
-            .navigationTitle("Join household")
+            .navigationTitle("Join Collection")
             .interactiveDismissDisabled()
         }
         .presentationDetents([.medium, .large])

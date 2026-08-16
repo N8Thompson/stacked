@@ -2,7 +2,7 @@
 //  ExportService.swift
 //  Stacked
 //
-//  Builds insurance-ready CSV and PDF inventory files.
+//  Inventory CSV and PDF export. Not currently shown in the app.
 //
 
 import Foundation
@@ -76,17 +76,12 @@ enum ExportService {
                 String(format: "%.2f", book.totalValue),
                 basis,
             ]
-            rows.append(fields.map(escapeCSV).joined(separator: ","))
+            rows.append(CSVEscaping.row(fields))
         }
         let total = books.totalCost
         rows.append("")
         rows.append("Grand Total,,,,,,,\(String(format: "%.2f", total)),")
         return Data(rows.joined(separator: "\n").utf8)
-    }
-
-    private static func escapeCSV(_ field: String) -> String {
-        guard field.contains(",") || field.contains("\"") || field.contains("\n") else { return field }
-        return "\"\(field.replacingOccurrences(of: "\"", with: "\"\""))\""
     }
 
     static func writeCSV(_ books: [Book]) throws -> URL {

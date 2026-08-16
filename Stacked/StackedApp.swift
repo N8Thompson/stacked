@@ -14,6 +14,7 @@ struct StackedApp: App {
 
     @State private var router = AppRouter()
     @State private var appSettings = AppSettings()
+    @State private var subscriptions = SubscriptionService.shared
 
     var body: some Scene {
         WindowGroup {
@@ -21,10 +22,12 @@ struct StackedApp: App {
             iOSAppRoot()
                 .environment(router)
                 .environment(appSettings)
+                .environment(subscriptions)
             #else
             macOSAppRoot()
                 .environment(router)
                 .environment(appSettings)
+                .environment(subscriptions)
             #endif
         }
     }
@@ -34,6 +37,7 @@ struct StackedApp: App {
 private struct iOSAppRoot: View {
     @Environment(AppRouter.self) private var router
     @Environment(AppSettings.self) private var appSettings
+    @Environment(SubscriptionService.self) private var subscriptions
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var bootstrap: iOSAppBootstrap?
@@ -53,14 +57,25 @@ private struct iOSAppRoot: View {
         }
         .environment(router)
         .environment(appSettings)
+        .environment(subscriptions)
         .tint(StackedTheme.accent)
         .task {
+            await subscriptions.load()
             guard bootstrap == nil else { return }
             bootstrap = await iOSAppBootstrap.load()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .stackedPersistenceDidReload)) { _ in
+            Task {
+                bootstrap = nil
+                bootstrap = await iOSAppBootstrap.load()
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
-            Task { await iOSAppBootstrap.refreshAfterForeground(bootstrap: bootstrap) }
+            Task {
+                await subscriptions.refreshEntitlements()
+                await iOSAppBootstrap.refreshAfterForeground(bootstrap: bootstrap)
+            }
         }
     }
 
@@ -99,11 +114,14 @@ private struct iOSAppBootstrap {
         SeedData.seedIfNeeded(persistence.viewContext)
         householdManager.refresh(in: persistence.viewContext)
 
+        let sharingService = HouseholdSharingService.shared
+        await sharingService.refreshRole(for: householdManager.activeHousehold)
+
         return iOSAppBootstrap(
             persistence: persistence,
             identity: identity,
             householdManager: householdManager,
-            sharingService: HouseholdSharingService.shared
+            sharingService: sharingService
         )
     }
 
@@ -112,6 +130,7 @@ private struct iOSAppBootstrap {
         guard let bootstrap else { return }
         bootstrap.householdManager.refresh(in: bootstrap.persistence.viewContext)
         bootstrap.householdManager.bumpLibraryRevision()
+        await bootstrap.sharingService.refreshRole(for: bootstrap.householdManager.activeHousehold)
     }
 }
 #endif
@@ -120,6 +139,7 @@ private struct iOSAppBootstrap {
 private struct macOSAppRoot: View {
     @Environment(AppRouter.self) private var router
     @Environment(AppSettings.self) private var appSettings
+    @Environment(SubscriptionService.self) private var subscriptions
 
     @State private var persistence = PersistenceController.shared
     @State private var identity = CloudKitIdentityService.shared
@@ -130,6 +150,7 @@ private struct macOSAppRoot: View {
         RootView()
             .environment(router)
             .environment(appSettings)
+            .environment(subscriptions)
             .environment(\.managedObjectContext, persistence.viewContext)
             .environment(identity)
             .environment(householdManager)
@@ -137,6 +158,7 @@ private struct macOSAppRoot: View {
             .tint(StackedTheme.accent)
             .stackedScreenBackground()
             .task {
+                await subscriptions.load()
                 await persistence.waitUntilStoresAreLoaded()
                 householdManager.startObservingIfNeeded()
                 householdManager.refresh(in: persistence.viewContext)

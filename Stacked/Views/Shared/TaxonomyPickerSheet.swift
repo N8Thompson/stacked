@@ -47,8 +47,10 @@ struct TaxonomyPickerView: View {
     @Environment(HouseholdManager.self) private var householdManager
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(SubscriptionService.self) private var subscriptions
 
     @State private var addEditor: NameEditorTarget?
+    @State private var showPaywall = false
 
     private var locations: [StorageLocation] { householdManager.locations }
     private var formats: [ItemFormat] { householdManager.formats }
@@ -62,6 +64,9 @@ struct TaxonomyPickerView: View {
             #endif
             .sheet(item: $addEditor) { target in
                 NameEditorSheet(target: target)
+            }
+            .sheet(isPresented: $showPaywall) {
+                PaywallView(reason: "The free library includes \(EntitlementPolicy.freeLocationLimit) locations. Upgrade to Stacked + to add more. Your existing locations stay.")
             }
     }
 
@@ -92,6 +97,11 @@ struct TaxonomyPickerView: View {
             }
 
             Button {
+                if kind == .location,
+                   !EntitlementPolicy.canAddLocation(isPlus: subscriptions.isPlus, currentLocations: locations.count) {
+                    showPaywall = true
+                    return
+                }
                 addEditor = NameEditorTarget(title: kind.addTitle, initialName: "") { name in
                     insertAndSelect(name: name)
                 }

@@ -11,13 +11,11 @@ import SwiftUI
 struct RootView: View {
     @Environment(AppRouter.self) private var router
 
-    private var mainTabs: [AppTab] { AppTab.mainTabs }
-
     var body: some View {
         @Bindable var router = router
         NavigationSplitView {
             VStack(spacing: 0) {
-                List(mainTabs, selection: Binding(
+                List(AppTab.allCases, selection: Binding(
                     get: { router.selectedTab },
                     set: { if let value = $0 { router.selectedTab = value } }
                 )) { tab in
@@ -44,7 +42,6 @@ struct RootView: View {
         switch tab {
         case .home: HomeView()
         case .manage: ManageView()
-        case .cost: CostView()
         case .settings: SettingsView()
         }
     }

@@ -41,7 +41,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Not signed in to iCloud")
                     .font(.subheadline.weight(.semibold))
-                Text("Sign in under Settings → Apple ID to sync your library and share with your household.")
+                Text("Sign in under Settings → Apple ID to sync your library and share it with other users.")
                     .font(.caption)
                     .foregroundStyle(StackedTheme.Text.secondary)
             }

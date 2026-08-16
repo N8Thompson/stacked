@@ -56,6 +56,8 @@ struct ManualBookFormView: View {
 
     @Environment(\.managedObjectContext) private var context
     @Environment(HouseholdManager.self) private var householdManager
+    @Environment(SubscriptionService.self) private var subscriptions
+    @State private var showPaywall = false
 
     @State private var draft: Book?
     @State private var selectedLocation: StorageLocation?
@@ -133,6 +135,9 @@ struct ManualBookFormView: View {
             guard let initial = initialSnapshot, let newSnapshot else { return }
             hasUnsavedChanges = newSnapshot != initial
         }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView(reason: "The free library includes \(EntitlementPolicy.freeUniqueTitleLimit) unique titles. Upgrade to Stacked + to add more. Your existing titles stay.")
+        }
     }
 
     private var locationBinding: Binding<StorageLocation?> {
@@ -193,6 +198,12 @@ struct ManualBookFormView: View {
         if !trimmedISBN.isEmpty, let existing = books.first(where: { $0.isbn == trimmedISBN }) {
             existing.copies += draft.copies
             context.delete(draft)
+        } else {
+            let currentCount = books.filter { $0.objectID != draft.objectID }.count
+            guard EntitlementPolicy.canAddUniqueTitle(isPlus: subscriptions.isPlus, currentUniqueTitles: currentCount) else {
+                showPaywall = true
+                return
+            }
         }
 
         draftWasSaved = true

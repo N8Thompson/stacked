@@ -1,0 +1,80 @@
+{
+  "identifier" : "A7E2C19B",
+  "nonRenewingSubscriptions" : [],
+  "products" : [],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "21482041",
+      "localizations" : [
+        {
+          "description" : "Unlimited library tools for Stacked",
+          "displayName" : "Stacked +",
+          "locale" : "en_US"
+        }
+      ],
+      "name" : "Stacked Plus",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "2.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "1001",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Unlimited titles, locations, Bluetooth scanner, cost tracking, and household sharing.",
+              "displayName" : "Stacked + Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.thompson.Stacked.plus.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Plus Monthly",
+          "subscriptionGroupID" : "21482041",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "24.99",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "1002",
+          "introductoryOffer" : {
+            "displayPrice" : "0",
+            "internalID" : "1003",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P7D"
+          },
+          "localizations" : [
+            {
+              "description" : "Unlimited titles, locations, Bluetooth scanner, cost tracking, and household sharing. Includes a 7-day free trial.",
+              "displayName" : "Stacked + Annual",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.thompson.Stacked.plus.annual",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Plus Annual",
+          "subscriptionGroupID" : "21482041",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

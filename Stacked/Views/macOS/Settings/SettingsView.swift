@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var editor: NameEditorTarget?
     @State private var deleteRequest: TaxonomyDeleteRequest?
     @State private var taxonomyError: String?
+    @State private var sheet: SettingsSheet?
 
     var body: some View {
         NavigationStack {
@@ -20,12 +21,14 @@ struct SettingsView: View {
                 SettingsContent(
                     editor: $editor,
                     deleteRequest: $deleteRequest,
-                    taxonomyError: $taxonomyError
+                    taxonomyError: $taxonomyError,
+                    sheet: $sheet
                 )
                 .padding(20)
             }
             .navigationTitle("Settings")
         }
+        .settingsDestinationSheets($sheet)
         .sheet(item: $editor) { target in
             NameEditorSheet(target: target)
         }
