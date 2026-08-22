@@ -9,14 +9,20 @@ import SwiftUI
 
 #if os(macOS)
 struct HomeView: View {
+    @Environment(SubscriptionService.self) private var subscriptions
+
     @State private var showAddSheet = false
 
     var body: some View {
         NavigationStack {
-            HomeScreen()
+            HomeScreen {
+                CollectionAccessBanner()
+            }
                 .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button { showAddSheet = true } label: { Label("Add", systemImage: "plus") }
+                    if subscriptions.canContributeToCurrentOrg {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button { showAddSheet = true } label: { Label("Add", systemImage: "plus") }
+                        }
                     }
                 }
                 .addBookSheet(isPresented: $showAddSheet, preselection: AddPreselection())

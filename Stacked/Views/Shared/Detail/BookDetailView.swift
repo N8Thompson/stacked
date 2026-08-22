@@ -13,6 +13,7 @@ struct BookDetailView: View {
 
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(SubscriptionService.self) private var subscriptions
 
     @State private var isEditing = false
     @State private var showDeleteSheet = false
@@ -46,14 +47,16 @@ struct BookDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button(isEditing ? "Done" : "Edit") {
-                        if isEditing {
-                            guard saveEdits() else { return }
-                        } else {
-                            validationError = nil
+                if subscriptions.canContributeToCurrentOrg {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button(isEditing ? "Done" : "Edit") {
+                            if isEditing {
+                                guard saveEdits() else { return }
+                            } else {
+                                validationError = nil
+                            }
+                            isEditing.toggle()
                         }
-                        isEditing.toggle()
                     }
                 }
             }
@@ -62,6 +65,13 @@ struct BookDetailView: View {
                     #if os(iOS)
                     .presentationDetents([.medium])
                     #endif
+            }
+            .onChange(of: subscriptions.canContributeToCurrentOrg) { _, canContribute in
+                if !canContribute {
+                    isEditing = false
+                    showDeleteSheet = false
+                    taxonomyPicker = nil
+                }
             }
     }
 
@@ -89,7 +99,7 @@ struct BookDetailView: View {
             isEditing: isEditing,
             isISBNEditable: book.isManualEntry,
             listPriceEditable: book.isManualEntry,
-            showDelete: true,
+            showDelete: subscriptions.canContributeToCurrentOrg,
             validationError: validationError,
             onDelete: { showDeleteSheet = true },
             taxonomyPicker: $taxonomyPicker
@@ -97,6 +107,10 @@ struct BookDetailView: View {
     }
 
     private func saveEdits() -> Bool {
+        guard subscriptions.canContributeToCurrentOrg else {
+            validationError = "This collection is read-only while the owner's Stacked + access is inactive."
+            return false
+        }
         guard BookFormValidation.isValid(
             title: book.title,
             authors: book.authors,

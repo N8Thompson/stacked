@@ -103,14 +103,17 @@ struct BluetoothScannerView: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button(role: .destructive) {
-                                actions.removeScannerItem(
-                                    item,
-                                    orgManager: orgManager,
-                                    context: context
-                                )
-                            } label: {
-                                Label("Delete", systemImage: "trash")
+                            if subscriptions.canContributeToCurrentOrg {
+                                Button(role: .destructive) {
+                                    actions.removeScannerItem(
+                                        item,
+                                        orgManager: orgManager,
+                                        context: context,
+                                        canContribute: subscriptions.canContributeToCurrentOrg
+                                    )
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
                             }
                         }
                 }

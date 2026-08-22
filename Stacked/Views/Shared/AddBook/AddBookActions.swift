@@ -300,8 +300,13 @@ final class AddBookActions {
     func removeScannerItem(
         _ item: ScannerSessionItem,
         orgManager: OrgManager,
-        context: NSManagedObjectContext
+        context: NSManagedObjectContext,
+        canContribute: Bool
     ) {
+        guard canContribute else {
+            errorMessage = "This collection is read-only while the owner's Stacked + access is inactive."
+            return
+        }
         if case .added(let info) = item {
             let books = orgManager.allBooks(in: context)
             if let book = books.first(where: { $0.isbn == info.isbn }) {

@@ -50,6 +50,7 @@ struct TaxonomyDeleteSheet: View {
     let onDelete: (TaxonomyDeleteRequest, StorageLocation?, ItemFormat?, ItemBinding?) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(SubscriptionService.self) private var subscriptions
 
     @State private var selectedLocationID: UUID?
     @State private var selectedFormatID: UUID?
@@ -164,6 +165,7 @@ struct TaxonomyDeleteSheet: View {
     }
 
     private var canDelete: Bool {
+        guard subscriptions.canContributeToCurrentOrg else { return false }
         guard request.titleCount > 0 else { return true }
         switch request.target {
         case .location:
@@ -192,6 +194,10 @@ struct TaxonomyDeleteSheet: View {
     }
 
     private func submit() {
+        guard subscriptions.canContributeToCurrentOrg else {
+            dismiss()
+            return
+        }
         let replacementLocation = locations.first { $0.id == selectedLocationID }
         let replacementFormat = formats.first { $0.id == selectedFormatID }
         let replacementBinding: ItemBinding?

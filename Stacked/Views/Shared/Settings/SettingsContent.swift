@@ -420,6 +420,7 @@ struct SettingsContent: View {
                     name: location.name,
                     isDefault: location.isDefault,
                     iconName: location.displayIconName,
+                    canEdit: subscriptions.canContributeToCurrentOrg,
                     onRename: { editor = renameLocation(location) },
                     onMakeDefault: location.isDefault ? nil : { makeDefaultLocation(location) },
                     onDelete: locations.count > 1 ? { requestDeleteLocation(location) } : nil
@@ -427,9 +428,11 @@ struct SettingsContent: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
             }
-            cardDivider()
-            cardButton(title: "Add location", systemImage: "plus") {
-                requestAddLocation()
+            if subscriptions.canContributeToCurrentOrg {
+                cardDivider()
+                cardButton(title: "Add location", systemImage: "plus") {
+                    requestAddLocation()
+                }
             }
         }
         #else
@@ -439,13 +442,16 @@ struct SettingsContent: View {
                     name: location.name,
                     isDefault: location.isDefault,
                     iconName: location.displayIconName,
+                    canEdit: subscriptions.canContributeToCurrentOrg,
                     onRename: { editor = renameLocation(location) },
                     onMakeDefault: location.isDefault ? nil : { makeDefaultLocation(location) },
                     onDelete: locations.count > 1 ? { requestDeleteLocation(location) } : nil
                 )
             }
-            Button { requestAddLocation() } label: {
-                Label("Add location", systemImage: "plus")
+            if subscriptions.canContributeToCurrentOrg {
+                Button { requestAddLocation() } label: {
+                    Label("Add location", systemImage: "plus")
+                }
             }
         } header: {
             Text("Locations")
@@ -468,6 +474,7 @@ struct SettingsContent: View {
                     name: format.name,
                     isDefault: format.isDefault,
                     iconName: format.displayIconName,
+                    canEdit: subscriptions.canContributeToCurrentOrg,
                     onRename: { editor = renameFormat(format) },
                     onMakeDefault: format.isDefault ? nil : { makeDefaultFormat(format) },
                     onDelete: { requestDeleteFormat(format) }
@@ -475,9 +482,11 @@ struct SettingsContent: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
             }
-            cardDivider()
-            cardButton(title: "Add format", systemImage: "plus") {
-                requestAddFormat()
+            if subscriptions.canContributeToCurrentOrg {
+                cardDivider()
+                cardButton(title: "Add format", systemImage: "plus") {
+                    requestAddFormat()
+                }
             }
         }
         #else
@@ -487,13 +496,16 @@ struct SettingsContent: View {
                     name: format.name,
                     isDefault: format.isDefault,
                     iconName: format.displayIconName,
+                    canEdit: subscriptions.canContributeToCurrentOrg,
                     onRename: { editor = renameFormat(format) },
                     onMakeDefault: format.isDefault ? nil : { makeDefaultFormat(format) },
                     onDelete: { requestDeleteFormat(format) }
                 )
             }
-            Button { requestAddFormat() } label: {
-                Label("Add format", systemImage: "plus")
+            if subscriptions.canContributeToCurrentOrg {
+                Button { requestAddFormat() } label: {
+                    Label("Add format", systemImage: "plus")
+                }
             }
         } header: {
             Text("Formats")
@@ -515,6 +527,7 @@ struct SettingsContent: View {
                 taxonomyRow(
                     name: binding.name,
                     isDefault: binding.isDefault,
+                    canEdit: subscriptions.canContributeToCurrentOrg,
                     onRename: { editor = renameBinding(binding) },
                     onMakeDefault: binding.isDefault ? nil : { makeDefaultBinding(binding) },
                     onDelete: { requestDeleteBinding(binding) }
@@ -522,9 +535,11 @@ struct SettingsContent: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
             }
-            cardDivider()
-            cardButton(title: "Add binding", systemImage: "plus") {
-                requestAddBinding()
+            if subscriptions.canContributeToCurrentOrg {
+                cardDivider()
+                cardButton(title: "Add binding", systemImage: "plus") {
+                    requestAddBinding()
+                }
             }
         }
         #else
@@ -533,13 +548,16 @@ struct SettingsContent: View {
                 taxonomyRow(
                     name: binding.name,
                     isDefault: binding.isDefault,
+                    canEdit: subscriptions.canContributeToCurrentOrg,
                     onRename: { editor = renameBinding(binding) },
                     onMakeDefault: binding.isDefault ? nil : { makeDefaultBinding(binding) },
                     onDelete: { requestDeleteBinding(binding) }
                 )
             }
-            Button { requestAddBinding() } label: {
-                Label("Add binding", systemImage: "plus")
+            if subscriptions.canContributeToCurrentOrg {
+                Button { requestAddBinding() } label: {
+                    Label("Add binding", systemImage: "plus")
+                }
             }
         } header: {
             Text("Bindings")
@@ -575,6 +593,7 @@ struct SettingsContent: View {
         name: String,
         isDefault: Bool,
         iconName: String? = nil,
+        canEdit: Bool = true,
         onRename: @escaping () -> Void,
         onMakeDefault: (() -> Void)?,
         onDelete: (() -> Void)?
@@ -586,49 +605,59 @@ struct SettingsContent: View {
                     .foregroundStyle(StackedTheme.accent)
             }
 
-            Button(action: onRename) {
-                HStack(spacing: 8) {
-                    Text(name)
-                        .foregroundStyle(StackedTheme.Text.primary)
-                    if isDefault {
-                        Text("Default")
-                            .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(Capsule().fill(StackedTheme.accentMuted))
-                            .foregroundStyle(StackedTheme.accent)
-                    }
-                    Spacer(minLength: 0)
+            if canEdit {
+                Button(action: onRename) {
+                    taxonomyRowLabel(name: name, isDefault: isDefault)
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+            } else {
+                taxonomyRowLabel(name: name, isDefault: isDefault)
             }
-            .buttonStyle(.plain)
 
-            Menu {
-                Button(iconName == nil ? "Rename" : "Edit", action: onRename)
-                if let onMakeDefault {
-                    Button("Make Default", action: onMakeDefault)
+            if canEdit {
+                Menu {
+                    Button(iconName == nil ? "Rename" : "Edit", action: onRename)
+                    if let onMakeDefault {
+                        Button("Make Default", action: onMakeDefault)
+                    }
+                    if let onDelete {
+                        Button("Delete", role: .destructive, action: onDelete)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundStyle(StackedTheme.Text.secondary)
                 }
-                if let onDelete {
-                    Button("Delete", role: .destructive, action: onDelete)
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .foregroundStyle(StackedTheme.Text.secondary)
+                .menuStyle(.borderlessButton)
             }
-            .menuStyle(.borderlessButton)
         }
         #if os(iOS)
         .swipeActions(edge: .trailing) {
-            if let onDelete {
+            if canEdit, let onDelete {
                 Button("Delete", role: .destructive, action: onDelete)
             }
         }
         .swipeActions(edge: .leading) {
-            if let onMakeDefault {
+            if canEdit, let onMakeDefault {
                 Button("Default", action: onMakeDefault).tint(StackedTheme.accent)
             }
         }
         #endif
+    }
+
+    private func taxonomyRowLabel(name: String, isDefault: Bool) -> some View {
+        HStack(spacing: 8) {
+            Text(name)
+                .foregroundStyle(StackedTheme.Text.primary)
+            if isDefault {
+                Text("Default")
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Capsule().fill(StackedTheme.accentMuted))
+                    .foregroundStyle(StackedTheme.accent)
+            }
+            Spacer(minLength: 0)
+        }
+        .contentShape(Rectangle())
     }
 
     #if os(macOS)
@@ -792,6 +821,14 @@ struct SettingsContent: View {
         sheet = .paywall(reason)
     }
 
+    private func requireContributionAccess() -> Bool {
+        guard subscriptions.canContributeToCurrentOrg else {
+            persistenceError = "This collection is read-only while the owner's Stacked + access is inactive."
+            return false
+        }
+        return true
+    }
+
     private func requestAddLocation() {
         guard subscriptions.canContributeToCurrentOrg else {
             persistenceError = "The collection owner's Stacked + access must be active before participants can add locations."
@@ -915,6 +952,7 @@ struct SettingsContent: View {
             initialIconName: "books.vertical.fill",
             iconCategories: LocationIconCatalog.categories
         ) { name, iconName in
+            guard requireContributionAccess() else { return }
             guard let org else { return }
             let isFirst = locations.isEmpty
             _ = StorageLocation.create(
@@ -935,6 +973,7 @@ struct SettingsContent: View {
             initialIconName: location.displayIconName,
             iconCategories: LocationIconCatalog.categories
         ) { name, iconName in
+            guard requireContributionAccess() else { return }
             let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return }
             location.name = trimmed
@@ -944,12 +983,14 @@ struct SettingsContent: View {
     }
 
     private func makeDefaultLocation(_ location: StorageLocation) {
+        guard requireContributionAccess() else { return }
         for other in locations { other.isDefault = false }
         location.isDefault = true
         PersistenceController.shared.save()
     }
 
     private func requestDeleteLocation(_ location: StorageLocation) {
+        guard requireContributionAccess() else { return }
         guard locations.count > 1 else { return }
         if location.titleCount > 0 {
             deleteRequest = TaxonomyDeleteRequest(target: .location(location))
@@ -959,6 +1000,7 @@ struct SettingsContent: View {
     }
 
     private func deleteUnused(_ location: StorageLocation) {
+        guard requireContributionAccess() else { return }
         let wasDefault = location.isDefault
         context.delete(location)
         if wasDefault, let next = locations.first(where: { $0.id != location.id }) {
@@ -974,6 +1016,7 @@ struct SettingsContent: View {
             initialIconName: format.displayIconName,
             iconCategories: FormatIconCatalog.categories
         ) { name, iconName in
+            guard requireContributionAccess() else { return }
             let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return }
             format.name = trimmed
@@ -989,6 +1032,7 @@ struct SettingsContent: View {
             initialIconName: "square.stack.3d.up.fill",
             iconCategories: FormatIconCatalog.categories
         ) { name, iconName in
+            guard requireContributionAccess() else { return }
             guard let org else { return }
             let isFirst = formats.isEmpty
             _ = ItemFormat.create(
@@ -1003,12 +1047,14 @@ struct SettingsContent: View {
     }
 
     private func makeDefaultFormat(_ format: ItemFormat) {
+        guard requireContributionAccess() else { return }
         for other in formats { other.isDefault = false }
         format.isDefault = true
         PersistenceController.shared.save()
     }
 
     private func requestDeleteFormat(_ format: ItemFormat) {
+        guard requireContributionAccess() else { return }
         if format.titleCount > 0 {
             guard formats.count > 1 else {
                 taxonomyError = "Add another format before deleting the only one in use."
@@ -1021,6 +1067,7 @@ struct SettingsContent: View {
     }
 
     private func deleteUnused(_ format: ItemFormat) {
+        guard requireContributionAccess() else { return }
         let wasDefault = format.isDefault
         context.delete(format)
         if wasDefault, let next = formats.first(where: { $0.id != format.id }) {
@@ -1031,6 +1078,7 @@ struct SettingsContent: View {
 
     private func addBinding() -> NameEditorTarget {
         NameEditorTarget(title: "New Binding", initialName: "") { name in
+            guard requireContributionAccess() else { return }
             guard let org else { return }
             let isFirst = bindings.isEmpty
             _ = ItemBinding.create(in: context, org: org, name: name, isDefault: isFirst)
@@ -1040,6 +1088,7 @@ struct SettingsContent: View {
 
     private func renameBinding(_ binding: ItemBinding) -> NameEditorTarget {
         NameEditorTarget(title: "Rename Binding", initialName: binding.name) { name in
+            guard requireContributionAccess() else { return }
             let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return }
             binding.name = trimmed
@@ -1048,12 +1097,14 @@ struct SettingsContent: View {
     }
 
     private func makeDefaultBinding(_ binding: ItemBinding) {
+        guard requireContributionAccess() else { return }
         for other in bindings { other.isDefault = false }
         binding.isDefault = true
         PersistenceController.shared.save()
     }
 
     private func requestDeleteBinding(_ binding: ItemBinding) {
+        guard requireContributionAccess() else { return }
         if binding.titleCount > 0 {
             deleteRequest = TaxonomyDeleteRequest(target: .binding(binding))
         } else {
@@ -1062,6 +1113,7 @@ struct SettingsContent: View {
     }
 
     private func deleteUnused(_ binding: ItemBinding) {
+        guard requireContributionAccess() else { return }
         let wasDefault = binding.isDefault
         context.delete(binding)
         if wasDefault, let next = bindings.first(where: { $0.id != binding.id }) {

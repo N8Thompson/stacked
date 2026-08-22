@@ -10,6 +10,7 @@ import SwiftUI
 #if os(iOS)
 struct HomeView: View {
     @Environment(CloudKitIdentityService.self) private var identity
+    @Environment(SubscriptionService.self) private var subscriptions
 
     @State private var showAddSheet = false
 
@@ -17,13 +18,18 @@ struct HomeView: View {
         NavigationStack {
             ZStack {
                 HomeScreen {
-                    if !identity.isSignedIn {
-                        iCloudBanner
+                    VStack(spacing: 12) {
+                        if !identity.isSignedIn {
+                            iCloudBanner
+                        }
+                        CollectionAccessBanner()
                     }
                 }
                 .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button { showAddSheet = true } label: { Label("Add", systemImage: "plus") }
+                    if subscriptions.canContributeToCurrentOrg {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button { showAddSheet = true } label: { Label("Add", systemImage: "plus") }
+                        }
                     }
                 }
                 .addBookSheet(isPresented: $showAddSheet, preselection: AddPreselection())

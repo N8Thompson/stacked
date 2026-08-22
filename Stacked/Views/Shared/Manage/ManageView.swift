@@ -11,6 +11,8 @@ import SwiftUI
 struct ManageView: View {
     @Environment(AppRouter.self) private var router
     @Environment(OrgManager.self) private var orgManager
+    @Environment(OrgSharingService.self) private var sharingService
+    @Environment(SubscriptionService.self) private var subscriptions
     @Environment(\.managedObjectContext) private var context
 
     @State private var searchText = ""
@@ -25,9 +27,22 @@ struct ManageView: View {
     private var locations: [StorageLocation] { orgManager.locations }
     private var formats: [ItemFormat] { orgManager.formats }
 
+    private var showsAccessBanner: Bool {
+        if sharingService.currentRole == .participant {
+            return !subscriptions.canContributeToCurrentOrg
+        }
+        return !subscriptions.isPlus
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                if showsAccessBanner {
+                    CollectionAccessBanner()
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                }
+
                 if showsFilterChips {
                     filterChips
                         .background(StackedTheme.Background.primary)
@@ -49,11 +64,13 @@ struct ManageView: View {
             .navigationTitle("Library")
             .searchable(text: $searchText, prompt: "Search title, author, ISBN")
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showAddSheet = true
-                    } label: {
-                        Label("Add", systemImage: "plus")
+                if subscriptions.canContributeToCurrentOrg {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            showAddSheet = true
+                        } label: {
+                            Label("Add", systemImage: "plus")
+                        }
                     }
                 }
             }
@@ -238,7 +255,9 @@ struct ManageView: View {
             Label(books.isEmpty ? "No items yet" : "No matches", systemImage: "books.vertical")
         } description: {
             Text(books.isEmpty
-                 ? "Tap + to search for a book and add it to your library."
+                 ? (subscriptions.canContributeToCurrentOrg
+                    ? "Tap + to search for a book and add it to your library."
+                    : "This collection is read-only while the owner's Stacked + access is inactive.")
                  : "Try adjusting your search or filters.")
         }
     }

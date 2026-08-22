@@ -14,6 +14,7 @@ struct DeleteCopiesSheet: View {
 
     @Environment(\.managedObjectContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(SubscriptionService.self) private var subscriptions
 
     @State private var removeCount = 1
     @State private var confirmDeleteAll = false
@@ -91,6 +92,10 @@ struct DeleteCopiesSheet: View {
     }
 
     private func removeCopies() {
+        guard subscriptions.canContributeToCurrentOrg else {
+            dismiss()
+            return
+        }
         switch CopyDeletionPolicy.action(copyCount: copyCount, removeCount: removeCount) {
         case .deleteEntry:
             confirmDeleteAll = true
@@ -102,6 +107,10 @@ struct DeleteCopiesSheet: View {
     }
 
     private func deleteEntire() {
+        guard subscriptions.canContributeToCurrentOrg else {
+            dismiss()
+            return
+        }
         context.delete(book)
         PersistenceController.shared.save()
         dismiss()
