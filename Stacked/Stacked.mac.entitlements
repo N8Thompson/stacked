@@ -10,8 +10,10 @@
 	<array>
 		<string>CloudKit</string>
 	</array>
-	<key>aps-environment</key>
-	<string>development</string>
+	<key>com.apple.developer.ubiquity-kvstore-identifier</key>
+	<string>$(TeamIdentifierPrefix)com.thompson.Stacked</string>
+	<key>com.apple.developer.aps-environment</key>
+	<string>$(APS_ENVIRONMENT)</string>
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
 	<key>com.apple.security.files.user-selected.read-only</key>

@@ -30,6 +30,11 @@ struct RootView: View {
                 showMergeOnJoin = true
             }
         }
+        .onAppear {
+            if sharingService.pendingMergeAfterJoin, orgManager.privateBookCount(in: context) > 0 {
+                showMergeOnJoin = true
+            }
+        }
         .sheet(isPresented: $showMergeOnJoin) {
             MergeOnJoinSheet(bookCount: orgManager.privateBookCount(in: context))
         }

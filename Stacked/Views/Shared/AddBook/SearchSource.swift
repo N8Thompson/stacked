@@ -18,9 +18,9 @@ enum SearchSource: String, CaseIterable, Identifiable {
     var segmentTitle: String {
         switch self {
         case .text: return "Text"
-        case .scanBarcode: return "Barcode"
-        case .scanText: return "Cover"
-        case .scanner: return "Scanner"
+        case .scanBarcode: return "Camera ISBN"
+        case .scanText: return "Camera Text"
+        case .scanner: return "Bluetooth"
         case .manual: return "Manual"
         }
     }

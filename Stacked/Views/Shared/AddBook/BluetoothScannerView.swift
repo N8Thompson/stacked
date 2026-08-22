@@ -95,7 +95,8 @@ struct BluetoothScannerView: View {
                 orgManager: orgManager,
                 context: context,
                 provider: provider,
-                isPlus: subscriptions.isPlus
+                isPlus: subscriptions.currentOrgHasPlusAccess,
+                canContribute: subscriptions.canContributeToCurrentOrg
             )
         }
     }

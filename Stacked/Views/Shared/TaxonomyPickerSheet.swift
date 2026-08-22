@@ -51,6 +51,7 @@ struct TaxonomyPickerView: View {
 
     @State private var addEditor: NameEditorTarget?
     @State private var showPaywall = false
+    @State private var contributionError: String?
 
     private var locations: [StorageLocation] { orgManager.locations }
     private var formats: [ItemFormat] { orgManager.formats }
@@ -67,6 +68,14 @@ struct TaxonomyPickerView: View {
             }
             .sheet(isPresented: $showPaywall) {
                 PaywallView(reason: "The free library includes \(EntitlementPolicy.freeLocationLimit) locations. Upgrade to Stacked + to add more. Your existing locations stay.")
+            }
+            .alert("Can't add to this collection", isPresented: Binding(
+                get: { contributionError != nil },
+                set: { if !$0 { contributionError = nil } }
+            )) {
+                Button("OK", role: .cancel) { contributionError = nil }
+            } message: {
+                Text(contributionError ?? "")
             }
     }
 
@@ -97,8 +106,15 @@ struct TaxonomyPickerView: View {
             }
 
             Button {
+                guard subscriptions.canContributeToCurrentOrg else {
+                    contributionError = "The collection owner's Stacked + access must be active before participants can add organization options."
+                    return
+                }
                 if kind == .location,
-                   !EntitlementPolicy.canAddLocation(isPlus: subscriptions.isPlus, currentLocations: locations.count) {
+                   !EntitlementPolicy.canAddLocation(
+                       isPlus: subscriptions.currentOrgHasPlusAccess,
+                       currentLocations: locations.count
+                   ) {
                     showPaywall = true
                     return
                 }

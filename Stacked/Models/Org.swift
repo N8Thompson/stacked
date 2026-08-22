@@ -12,6 +12,8 @@ public class Org: NSManagedObject, Identifiable {
     @NSManaged public var name: String
     @NSManaged public var createdAt: Date?
     @NSManaged public var showCostTracking: Bool
+    @NSManaged public var ownerHasPermanentPlus: Bool
+    @NSManaged public var ownerPlusExpirationDate: Date?
     @NSManaged public var collections: NSSet?
     @NSManaged public var locations: NSSet?
     @NSManaged public var formats: NSSet?
@@ -31,6 +33,8 @@ public class Org: NSManagedObject, Identifiable {
         org.name = name
         org.createdAt = Date()
         org.showCostTracking = true
+        org.ownerHasPermanentPlus = false
+        org.ownerPlusExpirationDate = nil
         return org
     }
 }

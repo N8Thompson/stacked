@@ -123,7 +123,7 @@ struct AddBookSheet: View {
         let enabled = actions.isSourceEnabled(option)
         let selected = actions.source == option
         return Button {
-            actions.requestSourceChange(to: option, isPlus: subscriptions.isPlus)
+            actions.requestSourceChange(to: option, isPlus: subscriptions.currentOrgHasPlusAccess)
         } label: {
             Text(option.segmentTitle)
                 .font(.subheadline.weight(selected ? .semibold : .medium))
@@ -261,7 +261,11 @@ struct AddBookSheet: View {
                 List(actions.results) { result in
                     SearchResultRow(
                         result: result,
-                        ownedCopies: actions.ownedByISBN(books: books)[result.isbn] ?? 0
+                        ownedCopies: actions.ownedByISBN(books: books)[
+                            BookIdentity.canonicalISBN(result.isbn)
+                                ?? BookIdentity.normalizedISBN(result.isbn)
+                                ?? result.isbn
+                        ] ?? 0
                     ) { count in
                         actions.add(
                             result: result,
@@ -271,7 +275,8 @@ struct AddBookSheet: View {
                             formats: formats,
                             orgManager: orgManager,
                             context: context,
-                            isPlus: subscriptions.isPlus
+                            isPlus: subscriptions.currentOrgHasPlusAccess,
+                            canContribute: subscriptions.canContributeToCurrentOrg
                         )
                     }
                 }

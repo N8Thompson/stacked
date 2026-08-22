@@ -40,8 +40,10 @@ final class OrgManager {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let self, Self.shouldRefreshUI(for: notification, viewing: context) else { return }
-            bumpLibraryRevision()
+            Task { @MainActor [weak self] in
+                guard let self, Self.shouldRefreshUI(for: notification, viewing: context) else { return }
+                bumpLibraryRevision()
+            }
         }
 
         let remoteChange = center.addObserver(
@@ -49,7 +51,9 @@ final class OrgManager {
             object: coordinator,
             queue: .main
         ) { [weak self] _ in
-            self?.bumpLibraryRevision()
+            Task { @MainActor [weak self] in
+                self?.bumpLibraryRevision()
+            }
         }
 
         let cloudKitEvent = center.addObserver(
@@ -57,7 +61,9 @@ final class OrgManager {
             object: container,
             queue: .main
         ) { [weak self] _ in
-            self?.bumpLibraryRevision()
+            Task { @MainActor [weak self] in
+                self?.bumpLibraryRevision()
+            }
         }
 
         observers = [didSave, remoteChange, cloudKitEvent]

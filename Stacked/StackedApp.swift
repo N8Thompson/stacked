@@ -47,12 +47,16 @@ private struct iOSAppRoot: View {
     var body: some View {
         Group {
             if let bootstrap {
-                RootView()
-                    .environment(\.managedObjectContext, bootstrap.persistence.viewContext)
-                    .environment(bootstrap.identity)
-                    .environment(bootstrap.orgManager)
-                    .environment(bootstrap.sharingService)
-                    .stackedScreenBackground()
+                if let error = bootstrap.persistence.loadError {
+                    PersistenceFailureView(message: error)
+                } else {
+                    RootView()
+                        .environment(\.managedObjectContext, bootstrap.persistence.viewContext)
+                        .environment(bootstrap.identity)
+                        .environment(bootstrap.orgManager)
+                        .environment(bootstrap.sharingService)
+                        .stackedScreenBackground()
+                }
             } else {
                 launchPlaceholder
             }
@@ -106,12 +110,16 @@ private struct macOSAppRoot: View {
     var body: some View {
         Group {
             if let bootstrap {
-                RootView()
-                    .environment(\.managedObjectContext, bootstrap.persistence.viewContext)
-                    .environment(bootstrap.identity)
-                    .environment(bootstrap.orgManager)
-                    .environment(bootstrap.sharingService)
-                    .stackedScreenBackground()
+                if let error = bootstrap.persistence.loadError {
+                    PersistenceFailureView(message: error)
+                } else {
+                    RootView()
+                        .environment(\.managedObjectContext, bootstrap.persistence.viewContext)
+                        .environment(bootstrap.identity)
+                        .environment(bootstrap.orgManager)
+                        .environment(bootstrap.sharingService)
+                        .stackedScreenBackground()
+                }
             } else {
                 launchPlaceholder
             }
@@ -170,8 +178,10 @@ private struct AppBootstrap {
 
         let identity = CloudKitIdentityService.shared
         await identity.refresh()
-        SeedData.seedIfNeeded(persistence.viewContext)
-        orgManager.refresh(in: persistence.viewContext)
+        if persistence.loadError == nil {
+            SeedData.seedIfNeeded(persistence.viewContext)
+            orgManager.refresh(in: persistence.viewContext)
+        }
 
         let sharingService = OrgSharingService.shared
         await sharingService.refreshRole(for: orgManager.activeOrg)
@@ -190,5 +200,27 @@ private struct AppBootstrap {
         bootstrap.orgManager.refresh(in: bootstrap.persistence.viewContext)
         bootstrap.orgManager.bumpLibraryRevision()
         await bootstrap.sharingService.refreshRole(for: bootstrap.orgManager.activeOrg)
+    }
+}
+
+private struct PersistenceFailureView: View {
+    let message: String
+
+    var body: some View {
+        ContentUnavailableView {
+            Label("Library unavailable", systemImage: "exclamationmark.icloud")
+        } description: {
+            Text(message)
+        } actions: {
+            Button("Try again") {
+                PersistenceController.shared.reload(mode: PersistenceController.shared.mode)
+            }
+            if PersistenceController.shared.mode == .iCloud {
+                Button("Use only on this device") {
+                    PersistenceController.shared.reload(mode: .local)
+                }
+            }
+        }
+        .padding()
     }
 }

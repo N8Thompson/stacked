@@ -49,7 +49,13 @@ final class AddBookActions {
     }
 
     func ownedByISBN(books: [Book]) -> [String: Int] {
-        Dictionary(books.map { ($0.isbn, Int($0.copies)) }, uniquingKeysWith: +)
+        Dictionary(
+            books.compactMap { book in
+                (BookIdentity.canonicalISBN(book.isbn) ?? BookIdentity.normalizedISBN(book.isbn))
+                    .map { ($0, Int(book.copies)) }
+            },
+            uniquingKeysWith: +
+        )
     }
 
     func initTargetsIfNeeded(locations: [StorageLocation]) {
@@ -90,7 +96,7 @@ final class AddBookActions {
 
     func requestSourceChange(to option: SearchSource, isPlus: Bool) {
         if option == .scanner && !isPlus {
-            presentPaywall("Bluetooth rapid scanning is included with Stacked +.")
+            presentPaywall("Bluetooth batch scanning is included with Stacked +.")
             return
         }
         guard option != source else { return }
@@ -152,10 +158,28 @@ final class AddBookActions {
         formats: [ItemFormat],
         orgManager: OrgManager,
         context: NSManagedObjectContext,
-        isPlus: Bool
+        isPlus: Bool,
+        canContribute: Bool
     ) -> AddOutcome? {
+        guard canContribute else {
+            errorMessage = "The collection owner's Stacked + access must be active before participants can add books."
+            return nil
+        }
         let outcome: AddOutcome
-        if let existing = books.first(where: { $0.isbn == result.isbn }) {
+        let resultKey = BookIdentity.key(
+            isbn: result.isbn,
+            title: result.title,
+            authors: result.authorsText,
+            publishedYear: result.publishedYear
+        )
+        if let existing = books.first(where: {
+            BookIdentity.key(
+                isbn: $0.isbn,
+                title: $0.title,
+                authors: $0.authors,
+                publishedYear: $0.publishedYearValue
+            ) == resultKey
+        }) {
             existing.copies += Int32(count)
             outcome = AddOutcome(isNewTitle: false, totalCopies: Int(existing.copies))
         } else {
@@ -206,7 +230,8 @@ final class AddBookActions {
         orgManager: OrgManager,
         context: NSManagedObjectContext,
         provider: BookSearchProvider,
-        isPlus: Bool
+        isPlus: Bool,
+        canContribute: Bool
     ) async {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -237,10 +262,16 @@ final class AddBookActions {
                 formats: formats,
                 orgManager: orgManager,
                 context: context,
-                isPlus: isPlus
+                isPlus: isPlus,
+                canContribute: canContribute
             ) else {
                 if showPaywall {
                     recordScannerError(message: uniqueTitleLimitReason(), scanned: isbn)
+                } else if !canContribute {
+                    recordScannerError(
+                        message: "The collection owner's Stacked + access must be active before participants can add books.",
+                        scanned: isbn
+                    )
                 } else {
                     recordScannerError(message: "Couldn't add this book.", scanned: isbn)
                 }
@@ -307,11 +338,11 @@ final class AddBookActions {
         case .text:
             return "Search by title, author, or keyword to add books."
         case .scanBarcode:
-            return "Point the camera at a barcode on the back cover."
+            return "Use the camera to scan the ISBN barcode on the back cover."
         case .scanText:
-            return "Point the camera at the cover and tap recognized text to search."
+            return "Use the camera to recognize title or author text on the cover."
         case .scanner:
-            return "Connect your Bluetooth scanner and scan a book to add it."
+            return "Connect a Bluetooth barcode scanner to add books continuously."
         case .manual:
             return ""
         }
@@ -385,15 +416,13 @@ final class AddBookActions {
         if let regex = try? NSRegularExpression(pattern: #"(978|979)[0-9]{10}"#),
            let match = regex.firstMatch(in: upper, range: NSRange(upper.startIndex..., in: upper)),
            let range = Range(match.range, in: upper) {
-            return String(upper[range])
+            return BookIdentity.canonicalISBN(String(upper[range]))
         }
-        let compact = upper.filter { $0.isNumber || $0 == "X" }
-        guard compact.count == 10 || compact.count == 13 else { return nil }
-        return compact
+        return BookIdentity.canonicalISBN(upper)
     }
 
     private func isValidISBN(_ isbn: String) -> Bool {
-        isbn.count == 10 || isbn.count == 13
+        BookIdentity.canonicalISBN(isbn) != nil
     }
 
     private func normalizedScanQuery(_ raw: String) -> String {

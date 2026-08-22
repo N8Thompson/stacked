@@ -19,10 +19,13 @@ final class PersistenceController: ObservableObject {
     private(set) var sharedStore: NSPersistentStore?
     private(set) var storesAreLoaded = false
     private(set) var mode: PersistenceMode
+    private(set) var loadError: String?
 
     private var expectedStoreCount = 1
     private var loadedStoreCount = 0
     private let inMemory: Bool
+    private var initialCloudImportCompleted = false
+    private var cloudEventObserver: NSObjectProtocol?
 
     var viewContext: NSManagedObjectContext { container.viewContext }
 
@@ -34,6 +37,9 @@ final class PersistenceController: ObservableObject {
         self.inMemory = inMemory
         self.mode = inMemory ? .local : mode
         self.container = NSPersistentCloudKitContainer(name: "Stacked")
+        if !inMemory {
+            Self.removeObsoletePrelaunchStores()
+        }
         configureAndLoadStores()
     }
 
@@ -44,7 +50,13 @@ final class PersistenceController: ObservableObject {
         privateStore = nil
         sharedStore = nil
         storesAreLoaded = false
+        loadError = nil
         loadedStoreCount = 0
+        initialCloudImportCompleted = false
+        if let cloudEventObserver {
+            NotificationCenter.default.removeObserver(cloudEventObserver)
+            self.cloudEventObserver = nil
+        }
         container = NSPersistentCloudKitContainer(name: "Stacked")
         configureAndLoadStores()
         NotificationCenter.default.post(name: .stackedPersistenceDidReload, object: nil)
@@ -52,7 +64,9 @@ final class PersistenceController: ObservableObject {
 
     private func configureAndLoadStores() {
         guard let privateDescription = container.persistentStoreDescriptions.first else {
-            fatalError("Missing persistent store description.")
+            loadError = "Stacked couldn't configure its local database."
+            storesAreLoaded = true
+            return
         }
 
         if inMemory {
@@ -84,13 +98,16 @@ final class PersistenceController: ObservableObject {
         privateDescription.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
         privateDescription.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
 
+        if mode == .iCloud, !inMemory {
+            observeInitialCloudKitEvents()
+        }
+
         container.loadPersistentStores { description, error in
-            if let error {
-                fatalError("Core Data store failed: \(error)")
-            }
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                if description.url == Self.sharedStoreURL {
+                if let error {
+                    loadError = "Stacked couldn't open its database: \(error.localizedDescription)"
+                } else if description.url == Self.sharedStoreURL {
                     sharedStore = container.persistentStoreCoordinator.persistentStores
                         .first { $0.url == Self.sharedStoreURL }
                 } else {
@@ -111,41 +128,97 @@ final class PersistenceController: ObservableObject {
 
     func save() {
         guard viewContext.hasChanges else { return }
-        try? viewContext.save()
+        do {
+            try viewContext.save()
+        } catch {
+            loadError = "Stacked couldn't save your changes: \(error.localizedDescription)"
+        }
     }
 
     func waitUntilStoresAreLoaded() async {
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: .seconds(10))
         while !storesAreLoaded {
-            if clock.now >= deadline { return }
+            if clock.now >= deadline {
+                loadError = "Stacked timed out while opening its database."
+                return
+            }
             await Task.yield()
         }
     }
 
     /// Waits for CloudKit to import an existing library before local first-run seeding.
-    func waitForInitialCloudKitImport(maxWait: Duration = .seconds(12)) async {
+    func waitForInitialCloudKitImport(maxWait: Duration = .seconds(30)) async {
         guard usesCloudKit else { return }
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: maxWait)
 
         while clock.now < deadline {
+            if loadError != nil || initialCloudImportCompleted { return }
             let count = (try? viewContext.count(for: Org.fetchRequest())) ?? 0
             if count > 0 { return }
             try? await Task.sleep(for: .milliseconds(250))
         }
     }
 
+    private func observeInitialCloudKitEvents() {
+        cloudEventObserver = NotificationCenter.default.addObserver(
+            forName: NSPersistentCloudKitContainer.eventChangedNotification,
+            object: container,
+            queue: .main
+        ) { [weak self] notification in
+            guard let event = notification.userInfo?[
+                NSPersistentCloudKitContainer.eventNotificationUserInfoKey
+            ] as? NSPersistentCloudKitContainer.Event,
+                  event.endDate != nil else { return }
+            Task { @MainActor in
+                guard let self else { return }
+                #if DEBUG
+                let eventName: String
+                switch event.type {
+                case .setup: eventName = "setup"
+                case .import: eventName = "import"
+                case .export: eventName = "export"
+                @unknown default: eventName = "unknown"
+                }
+                print(
+                    "CloudKit \(eventName) \(event.succeeded ? "succeeded" : "failed"): "
+                        + (event.error?.localizedDescription ?? "no error")
+                )
+                #endif
+                if !event.succeeded, (event.type == .setup || event.type == .import) {
+                    self.loadError = "iCloud sync couldn't start: \(event.error?.localizedDescription ?? "Unknown iCloud error.")"
+                }
+                if event.type == .import {
+                    self.initialCloudImportCompleted = true
+                }
+            }
+        }
+    }
+
     static var cloudPrivateStoreURL: URL {
-        NSPersistentContainer.defaultDirectoryURL().appendingPathComponent("StackedPrivate.sqlite")
+        NSPersistentContainer.defaultDirectoryURL().appendingPathComponent("StackedPrivateV2.sqlite")
     }
 
     static var localStoreURL: URL {
-        NSPersistentContainer.defaultDirectoryURL().appendingPathComponent("StackedLocal.sqlite")
+        NSPersistentContainer.defaultDirectoryURL().appendingPathComponent("StackedLocalV2.sqlite")
     }
 
     static var sharedStoreURL: URL {
-        NSPersistentContainer.defaultDirectoryURL().appendingPathComponent("StackedShared.sqlite")
+        NSPersistentContainer.defaultDirectoryURL().appendingPathComponent("StackedSharedV2.sqlite")
+    }
+
+    private static func removeObsoletePrelaunchStores() {
+        let directory = NSPersistentContainer.defaultDirectoryURL()
+        let baseNames = ["Stacked.sqlite", "StackedPrivate.sqlite", "StackedShared.sqlite", "StackedLocal.sqlite"]
+        for baseName in baseNames {
+            let storeURL = directory.appendingPathComponent(baseName)
+            for suffix in ["", "-shm", "-wal"] {
+                try? FileManager.default.removeItem(
+                    at: URL(fileURLWithPath: storeURL.path + suffix)
+                )
+            }
+        }
     }
 }
 

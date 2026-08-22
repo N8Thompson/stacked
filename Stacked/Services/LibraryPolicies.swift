@@ -61,3 +61,36 @@ enum OrgSharePolicy {
         isPlus || hasExistingShare
     }
 }
+
+enum OrgAccessPolicy {
+    static func hasPlusAccess(
+        localIsPlus: Bool,
+        role: OrgRole,
+        ownerHasPermanentPlus: Bool,
+        ownerPlusExpirationDate: Date?,
+        now: Date = Date()
+    ) -> Bool {
+        switch role {
+        case .owner, .localOnly:
+            return localIsPlus
+        case .participant:
+            return ownerHasPermanentPlus || (ownerPlusExpirationDate.map { $0 > now } ?? false)
+        }
+    }
+
+    static func canContribute(
+        localIsPlus: Bool,
+        role: OrgRole,
+        ownerHasPermanentPlus: Bool,
+        ownerPlusExpirationDate: Date?,
+        now: Date = Date()
+    ) -> Bool {
+        hasPlusAccess(
+            localIsPlus: localIsPlus,
+            role: role,
+            ownerHasPermanentPlus: ownerHasPermanentPlus,
+            ownerPlusExpirationDate: ownerPlusExpirationDate,
+            now: now
+        )
+    }
+}

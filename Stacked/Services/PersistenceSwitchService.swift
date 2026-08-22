@@ -21,12 +21,18 @@ enum PersistenceSwitchService {
         source.reload(mode: .local)
         OrgManager.shared.restartObserving()
         await source.waitUntilStoresAreLoaded()
+        try throwIfStoreFailed(source)
         SeedData.seedIfNeeded(source.viewContext)
         OrgManager.shared.refresh(in: source.viewContext)
         guard let localOrg = OrgManager.shared.activeOrg else {
             throw BookSearchError.transport("Couldn't create a local library.")
         }
-        try LibraryMigrationService.applyImport(preview, into: localOrg, context: source.viewContext)
+        try LibraryMigrationService.applyImport(
+            preview,
+            into: localOrg,
+            context: source.viewContext,
+            access: .preserveExistingLibrary
+        )
         OrgManager.shared.refresh(in: source.viewContext)
     }
 
@@ -38,17 +44,24 @@ enum PersistenceSwitchService {
         }
         let payload = try LibraryMigrationService.backupPayload(org, context: source.viewContext)
         let preview = try LibraryMigrationService.previewImport(from: encode(payload))
+        let hasPlusAccess = SubscriptionService.shared.isPlus
 
         source.reload(mode: .iCloud)
         OrgManager.shared.restartObserving()
         await source.waitUntilStoresAreLoaded()
         await source.waitForInitialCloudKitImport()
+        try throwIfStoreFailed(source)
         SeedData.seedIfNeeded(source.viewContext)
         OrgManager.shared.refresh(in: source.viewContext)
         guard let cloudOrg = OrgManager.shared.activeOrg else {
             throw BookSearchError.transport("Couldn't open your iCloud library.")
         }
-        try LibraryMigrationService.applyImport(preview, into: cloudOrg, context: source.viewContext)
+        try LibraryMigrationService.applyImport(
+            preview,
+            into: cloudOrg,
+            context: source.viewContext,
+            access: .enforceLimits(hasPlusAccess: hasPlusAccess, canContribute: true)
+        )
         OrgManager.shared.refresh(in: source.viewContext)
     }
 
@@ -59,6 +72,7 @@ enum PersistenceSwitchService {
         OrgManager.shared.restartObserving()
         await source.waitUntilStoresAreLoaded()
         await source.waitForInitialCloudKitImport()
+        guard source.loadError == nil else { return }
         SeedData.seedIfNeeded(source.viewContext)
         OrgManager.shared.refresh(in: source.viewContext)
     }
@@ -72,12 +86,18 @@ enum PersistenceSwitchService {
         source.reload(mode: .local)
         OrgManager.shared.restartObserving()
         await source.waitUntilStoresAreLoaded()
+        try throwIfStoreFailed(source)
         SeedData.seedIfNeeded(source.viewContext)
         OrgManager.shared.refresh(in: source.viewContext)
         guard let localOrg = OrgManager.shared.activeOrg else {
             throw BookSearchError.transport("Couldn't create a local library.")
         }
-        try LibraryMigrationService.applyImport(preview, into: localOrg, context: source.viewContext)
+        try LibraryMigrationService.applyImport(
+            preview,
+            into: localOrg,
+            context: source.viewContext,
+            access: .preserveExistingLibrary
+        )
         OrgManager.shared.refresh(in: source.viewContext)
     }
 
@@ -85,5 +105,12 @@ enum PersistenceSwitchService {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         return try encoder.encode(payload)
+    }
+
+    @MainActor
+    private static func throwIfStoreFailed(_ persistence: PersistenceController) throws {
+        if let message = persistence.loadError {
+            throw BookSearchError.transport(message)
+        }
     }
 }

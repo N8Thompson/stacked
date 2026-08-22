@@ -30,7 +30,7 @@
           "introductoryOffer" : null,
           "localizations" : [
             {
-              "description" : "Unlimited titles, locations, Bluetooth scanner, cost tracking, and collection sharing.",
+              "description" : "Unlimited titles, locations, Bluetooth batch scanning, cost tracking, and collection sharing.",
               "displayName" : "Stacked + Monthly",
               "locale" : "en_US"
             }
@@ -58,7 +58,7 @@
           },
           "localizations" : [
             {
-              "description" : "Unlimited titles, locations, Bluetooth scanner, cost tracking, and collection sharing. Includes a 7-day free trial.",
+              "description" : "Unlimited titles, locations, Bluetooth batch scanning, cost tracking, and collection sharing. Includes a 7-day free trial.",
               "displayName" : "Stacked + Annual",
               "locale" : "en_US"
             }

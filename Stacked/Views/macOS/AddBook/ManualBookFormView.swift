@@ -187,6 +187,10 @@ struct ManualBookFormView: View {
             return
         }
         validationError = nil
+        guard subscriptions.canContributeToCurrentOrg else {
+            validationError = "The collection owner's Stacked + access must be active before participants can add books."
+            return
+        }
 
         let trimmedISBN = draft.isbn.trimmingCharacters(in: .whitespacesAndNewlines)
         draft.isbn = trimmedISBN
@@ -195,12 +199,29 @@ struct ManualBookFormView: View {
         draft.format = selectedFormat
         draft.bindingOption = selectedBinding
 
-        if !trimmedISBN.isEmpty, let existing = books.first(where: { $0.isbn == trimmedISBN }) {
+        let draftKey = BookIdentity.key(
+            isbn: draft.isbn,
+            title: draft.title,
+            authors: draft.authors,
+            publishedYear: draft.publishedYearValue
+        )
+        if let existing = books.first(where: {
+            $0.objectID != draft.objectID
+                && BookIdentity.key(
+                    isbn: $0.isbn,
+                    title: $0.title,
+                    authors: $0.authors,
+                    publishedYear: $0.publishedYearValue
+                ) == draftKey
+        }) {
             existing.copies += draft.copies
             context.delete(draft)
         } else {
             let currentCount = books.filter { $0.objectID != draft.objectID }.count
-            guard EntitlementPolicy.canAddUniqueTitle(isPlus: subscriptions.isPlus, currentUniqueTitles: currentCount) else {
+            guard EntitlementPolicy.canAddUniqueTitle(
+                isPlus: subscriptions.currentOrgHasPlusAccess,
+                currentUniqueTitles: currentCount
+            ) else {
                 showPaywall = true
                 return
             }

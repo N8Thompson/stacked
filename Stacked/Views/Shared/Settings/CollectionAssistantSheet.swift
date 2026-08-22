@@ -97,7 +97,6 @@ struct CollectionAssistantSheet: View {
     private var chooseStep: some View {
         List {
             Section("Are you looking to…") {
-                #if os(iOS)
                 Button {
                     Task { await openUserManagement() }
                 } label: {
@@ -114,7 +113,6 @@ struct CollectionAssistantSheet: View {
                     }
                 }
                 .disabled(isOpeningUserManagement)
-                #endif
 
                 Button {
                     step = .stackedCopy
@@ -186,7 +184,6 @@ struct CollectionAssistantSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    #if os(iOS)
     private func openUserManagement() async {
         guard !isOpeningUserManagement, let org else { return }
         isOpeningUserManagement = true
@@ -204,7 +201,6 @@ struct CollectionAssistantSheet: View {
             errorMessage = error.localizedDescription
         }
     }
-    #endif
 
     private func exportStackedBackup() {
         guard let org else { return }
@@ -248,7 +244,15 @@ struct CollectionAssistantSheet: View {
     private func applyImport(_ preview: MigrationPreview) {
         guard let org else { return }
         do {
-            try LibraryMigrationService.applyImport(preview, into: org, context: context)
+            try LibraryMigrationService.applyImport(
+                preview,
+                into: org,
+                context: context,
+                access: .enforceLimits(
+                    hasPlusAccess: subscriptions.currentOrgHasPlusAccess,
+                    canContribute: subscriptions.canContributeToCurrentOrg
+                )
+            )
             migrationPreview = nil
         } catch {
             errorMessage = error.localizedDescription

@@ -142,8 +142,8 @@ struct PaywallView: View {
                 description: "Build your collection without limits."
             )
             benefit(
-                title: "Bluetooth rapid scanning",
-                description: "Add items faster with a Bluetooth barcode scanner."
+                title: "Bluetooth batch scanning",
+                description: "Continuously add books with a Bluetooth barcode scanner."
             )
             benefit(
                 title: "Cost tracking",

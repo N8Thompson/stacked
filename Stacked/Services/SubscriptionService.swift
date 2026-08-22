@@ -27,6 +27,7 @@ final class SubscriptionService: SubscriptionProviding {
     private(set) var isPlus = false
     private(set) var hasComplimentaryPlus = false
     private(set) var hasStoreSubscription = false
+    private(set) var storeExpirationDate: Date?
     private(set) var products: [Product] = []
     private(set) var purchaseError: String?
     private(set) var isLoading = false
@@ -103,16 +104,25 @@ final class SubscriptionService: SubscriptionProviding {
 
     func refreshEntitlements() async {
         var entitled = false
+        var latestExpiration: Date?
         for await result in Transaction.currentEntitlements {
             guard let transaction = try? checkVerified(result) else { continue }
             if EntitlementPolicy.allProductIDs.contains(transaction.productID) {
                 entitled = true
-                break
+                if let expiration = transaction.expirationDate {
+                    if let current = latestExpiration {
+                        latestExpiration = max(current, expiration)
+                    } else {
+                        latestExpiration = expiration
+                    }
+                }
             }
         }
         storeIsPlus = entitled
+        storeExpirationDate = latestExpiration
         PlusPromoCodeStore.refreshFromiCloud()
         applyResolvedEntitlement()
+        await OrgSharingService.shared.publishOwnerEntitlementIfNeeded()
     }
 
     #if DEBUG
@@ -132,6 +142,30 @@ final class SubscriptionService: SubscriptionProviding {
         }
         #endif
         isPlus = storeIsPlus || hasComplimentaryPlus
+    }
+
+    func hasPlusAccess(for org: Org?, role: OrgRole) -> Bool {
+        OrgAccessPolicy.hasPlusAccess(
+            localIsPlus: isPlus,
+            role: role,
+            ownerHasPermanentPlus: org?.ownerHasPermanentPlus ?? false,
+            ownerPlusExpirationDate: org?.ownerPlusExpirationDate
+        )
+    }
+
+    var currentOrgHasPlusAccess: Bool {
+        hasPlusAccess(
+            for: OrgManager.shared.activeOrg,
+            role: OrgSharingService.shared.currentRole
+        )
+    }
+
+    var canContributeToCurrentOrg: Bool {
+        let role = OrgSharingService.shared.currentRole
+        if role == .participant {
+            return currentOrgHasPlusAccess
+        }
+        return true
     }
 
     private func observeiCloudPromoUnlock() {

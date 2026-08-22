@@ -12,9 +12,11 @@ struct MergeOnJoinSheet: View {
     @Environment(\.managedObjectContext) private var context
     @Environment(OrgManager.self) private var orgManager
     @Environment(OrgSharingService.self) private var sharingService
+    @Environment(SubscriptionService.self) private var subscriptions
     @Environment(\.dismiss) private var dismiss
 
     let bookCount: Int
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -57,6 +59,14 @@ struct MergeOnJoinSheet: View {
             .interactiveDismissDisabled()
         }
         .presentationDetents([.medium, .large])
+        .alert("Couldn't add your books", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
+        }
     }
 
     private func mergeIntoOrg() {
@@ -66,12 +76,19 @@ struct MergeOnJoinSheet: View {
             dismiss()
             return
         }
-        try? CollectionMergeService.mergePrivateIntoOrg(
-            source: source,
-            targetOrg: org,
-            in: context
-        )
-        sharingService.pendingMergeAfterJoin = false
-        dismiss()
+        do {
+            try CollectionMergeService.mergePrivateIntoOrg(
+                source: source,
+                targetOrg: org,
+                in: context,
+                hasPlusAccess: subscriptions.currentOrgHasPlusAccess,
+                canContribute: subscriptions.canContributeToCurrentOrg
+            )
+            sharingService.pendingMergeAfterJoin = false
+            orgManager.refresh(in: context)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }

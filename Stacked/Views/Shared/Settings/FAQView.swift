@@ -146,7 +146,7 @@ struct FAQView: View {
         [
             FAQEntry(
                 question: "What does Stacked + include?",
-                answer: "Unlimited titles and locations, Bluetooth rapid scanning, cost tracking, and sharing a collection with other users. Viewing, editing, and exporting your existing library stay available if a subscription ends."
+                answer: "Unlimited titles and locations, Bluetooth batch scanning, cost tracking, and sharing a collection with other users. Camera ISBN and text scanning are available separately. Viewing, editing, and exporting your existing library stay available if a subscription ends."
             ),
         ]
     }

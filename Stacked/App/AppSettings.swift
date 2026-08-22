@@ -2,8 +2,8 @@
 //  AppSettings.swift
 //  Stacked
 //
-//  User preferences. Cost tracking is a Plus-aware preference: subscribers can
-//  toggle it, and non-subscribers keep their stored prices without seeing them.
+//  User preferences. Cost tracking follows the active org owner's Plus access,
+//  so every participant sees the same shared cost information.
 //
 
 import Foundation
@@ -20,6 +20,9 @@ final class AppSettings {
     }
 
     var showCostTracking: Bool {
-        SubscriptionService.shared.isPlus && costTrackingPreference
+        SubscriptionService.shared.hasPlusAccess(
+            for: OrgManager.shared.activeOrg,
+            role: OrgSharingService.shared.currentRole
+        ) && costTrackingPreference
     }
 }

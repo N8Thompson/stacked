@@ -39,6 +39,16 @@ struct SettingsContent: View {
 
     var body: some View {
         settingsSections
+            .onAppear {
+                guard let error = sharingService.lastSharingError else { return }
+                persistenceError = error
+                sharingService.lastSharingError = nil
+            }
+            .onChange(of: sharingService.lastSharingError) { _, error in
+                guard let error else { return }
+                persistenceError = error
+                sharingService.lastSharingError = nil
+            }
             .alert("Use only on this device?", isPresented: $showDisconnectConfirm) {
                 Button("Keep a local copy") {
                     disconnectToLocal()
@@ -260,10 +270,19 @@ struct SettingsContent: View {
         #if os(macOS)
         settingsCard(
             title: "Users",
-            footer: "All users have full access to manage and contribute to the collection. Only the owner can add or remove additional users."
+            footer: userManagementFooter
         ) {
-            cardButton(title: "User management", systemImage: "person.2") {
-                Task { await openUserManagement() }
+            if isOpeningUserManagement {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Opening user management…")
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+            } else {
+                cardButton(title: "User management", systemImage: "person.2") {
+                    Task { await openUserManagement() }
+                }
             }
             if sharingService.pendingMergeAfterJoin {
                 cardDivider()
@@ -295,7 +314,7 @@ struct SettingsContent: View {
         } header: {
             Text("Users")
         } footer: {
-            Text("All users have full access to manage and contribute to the collection. Only the owner can add or remove additional users.")
+            Text(userManagementFooter)
         }
         #endif
     }
@@ -333,7 +352,7 @@ struct SettingsContent: View {
             title: "Cost",
             footer: costFooter
         ) {
-            if subscriptions.isPlus {
+            if subscriptions.currentOrgHasPlusAccess {
                 Toggle(
                     "Track item costs",
                     isOn: Binding(
@@ -358,7 +377,7 @@ struct SettingsContent: View {
         }
         #else
         Section {
-            if subscriptions.isPlus {
+            if subscriptions.currentOrgHasPlusAccess {
                 Toggle(
                     "Track item costs",
                     isOn: Binding(
@@ -455,7 +474,7 @@ struct SettingsContent: View {
             }
             cardDivider()
             cardButton(title: "Add format", systemImage: "plus") {
-                editor = addFormat()
+                requestAddFormat()
             }
         }
         #else
@@ -469,7 +488,7 @@ struct SettingsContent: View {
                     onDelete: { requestDeleteFormat(format) }
                 )
             }
-            Button { editor = addFormat() } label: {
+            Button { requestAddFormat() } label: {
                 Label("Add format", systemImage: "plus")
             }
         } header: {
@@ -501,7 +520,7 @@ struct SettingsContent: View {
             }
             cardDivider()
             cardButton(title: "Add binding", systemImage: "plus") {
-                editor = addBinding()
+                requestAddBinding()
             }
         }
         #else
@@ -515,7 +534,7 @@ struct SettingsContent: View {
                     onDelete: { requestDeleteBinding(binding) }
                 )
             }
-            Button { editor = addBinding() } label: {
+            Button { requestAddBinding() } label: {
                 Label("Add binding", systemImage: "plus")
             }
         } header: {
@@ -740,10 +759,22 @@ struct SettingsContent: View {
     }
 
     private var costFooter: String {
-        if subscriptions.isPlus {
+        if subscriptions.currentOrgHasPlusAccess {
             return "Show costs associated with your collection in the library and on Cost information."
         }
         return "Cost tracking is included with Stacked +. Your existing prices are kept and never deleted."
+    }
+
+    private var userManagementFooter: String {
+        if sharingService.currentRole == .participant,
+           !subscriptions.currentOrgHasPlusAccess {
+            return "This collection is read-only because the owner's Stacked + access is not active."
+        }
+        if sharingService.currentRole == .owner,
+           !subscriptions.isPlus {
+            return "Participants become read-only while the owner's Stacked + access is inactive. Existing users and data are kept."
+        }
+        return "The owner's Stacked + access covers every participant. All users can view costs and contribute; only the owner can manage access."
     }
 
     private func presentPaywall(_ reason: String) {
@@ -751,11 +782,34 @@ struct SettingsContent: View {
     }
 
     private func requestAddLocation() {
-        if EntitlementPolicy.canAddLocation(isPlus: subscriptions.isPlus, currentLocations: locations.count) {
+        guard subscriptions.canContributeToCurrentOrg else {
+            persistenceError = "The collection owner's Stacked + access must be active before participants can add locations."
+            return
+        }
+        if EntitlementPolicy.canAddLocation(
+            isPlus: subscriptions.currentOrgHasPlusAccess,
+            currentLocations: locations.count
+        ) {
             editor = addLocation()
         } else {
             presentPaywall("The free library includes \(EntitlementPolicy.freeLocationLimit) locations. Upgrade to add more. Your existing locations stay.")
         }
+    }
+
+    private func requestAddFormat() {
+        guard subscriptions.canContributeToCurrentOrg else {
+            persistenceError = "The collection owner's Stacked + access must be active before participants can add formats."
+            return
+        }
+        editor = addFormat()
+    }
+
+    private func requestAddBinding() {
+        guard subscriptions.canContributeToCurrentOrg else {
+            persistenceError = "The collection owner's Stacked + access must be active before participants can add bindings."
+            return
+        }
+        editor = addBinding()
     }
 
     private func openManageSubscriptions() {
@@ -773,8 +827,19 @@ struct SettingsContent: View {
     private func contributePrivateLibrary() {
         guard let org,
               let source = orgManager.privateLibraryCollection(in: context) else { return }
-        try? CollectionMergeService.mergePrivateIntoOrg(source: source, targetOrg: org, in: context)
-        sharingService.pendingMergeAfterJoin = false
+        do {
+            try CollectionMergeService.mergePrivateIntoOrg(
+                source: source,
+                targetOrg: org,
+                in: context,
+                hasPlusAccess: subscriptions.currentOrgHasPlusAccess,
+                canContribute: subscriptions.canContributeToCurrentOrg
+            )
+            sharingService.pendingMergeAfterJoin = false
+            orgManager.refresh(in: context)
+        } catch {
+            persistenceError = error.localizedDescription
+        }
     }
 
     private func openUserManagement() async {

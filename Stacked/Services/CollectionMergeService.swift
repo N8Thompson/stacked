@@ -13,24 +13,68 @@ enum CollectionMergeService {
     static func mergePrivateIntoOrg(
         source: BookCollection,
         targetOrg: Org,
-        in context: NSManagedObjectContext
+        in context: NSManagedObjectContext,
+        hasPlusAccess: Bool,
+        canContribute: Bool
     ) throws {
-        let identity = CloudKitIdentityService.shared
-        let targetCollection = BookCollection.create(
-            in: context,
-            org: targetOrg,
-            name: "\(identity.displayName)'s Library",
-            ownerDisplayName: identity.displayName,
-            ownerCloudRecordName: identity.recordName ?? ""
-        )
+        guard canContribute else {
+            throw BookSearchError.transport(
+                "The collection owner's Stacked + access must be active before participants can add books."
+            )
+        }
+        let targetCollections = (targetOrg.collections as? Set<BookCollection>) ?? []
+        guard let targetCollection = targetCollections.first(where: \.isActive) ?? targetCollections.first else {
+            throw BookSearchError.transport("The shared collection is not available.")
+        }
 
         let sourceBooks = (source.books as? Set<Book>) ?? []
+        var targetBooks = targetCollections.flatMap { ($0.books as? Set<Book>) ?? [] }
+        var targetByKey = Dictionary(
+            targetBooks.map { (bookIdentityKey($0), $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        if !hasPlusAccess {
+            let incomingKeys = Set(sourceBooks.map(bookIdentityKey))
+            let existingKeys = Set(targetByKey.keys)
+            let newTitleCount = incomingKeys.subtracting(existingKeys).count
+            guard existingKeys.count + newTitleCount <= EntitlementPolicy.freeUniqueTitleLimit else {
+                throw BookSearchError.transport(
+                    "Adding this library would exceed the free limit of \(EntitlementPolicy.freeUniqueTitleLimit) unique titles."
+                )
+            }
+
+            let existingLocations = Set(
+                ((targetOrg.locations as? Set<StorageLocation>) ?? [])
+                    .map { BookIdentity.normalizedText($0.name) }
+            )
+            let incomingLocations = Set(
+                sourceBooks.compactMap(\.location?.name).map(BookIdentity.normalizedText)
+            )
+            let newLocationCount = incomingLocations.subtracting(existingLocations).count
+            guard existingLocations.count + newLocationCount <= EntitlementPolicy.freeLocationLimit else {
+                throw BookSearchError.transport(
+                    "Adding this library would exceed the free limit of \(EntitlementPolicy.freeLocationLimit) locations."
+                )
+            }
+        }
+
         for book in sourceBooks {
-            if !book.isbn.isEmpty, let existing = findBook(isbn: book.isbn, org: targetOrg, in: context) {
+            let key = bookIdentityKey(book)
+            if let existing = targetByKey[key] {
                 existing.copies += book.copies
                 continue
             }
 
+            let targetLocation = book.location.flatMap {
+                TaxonomyService.findOrCreateLocation(name: $0.name, org: targetOrg, in: context)
+            }
+            let targetFormat = book.format.flatMap {
+                TaxonomyService.findOrCreateFormat(name: $0.name, org: targetOrg, in: context)
+            }
+            let targetBinding = book.bindingOption.flatMap {
+                TaxonomyService.findOrCreateBinding(name: $0.name, org: targetOrg, in: context)
+            }
             let copy = Book.create(
                 in: context,
                 collection: targetCollection,
@@ -45,9 +89,9 @@ enum CollectionMergeService {
                 actualCost: book.actualCostValue,
                 copies: Int(book.copies),
                 isManualEntry: book.isManualEntry,
-                location: book.location,
-                format: book.format,
-                bindingOption: book.bindingOption
+                location: targetLocation,
+                format: targetFormat,
+                bindingOption: targetBinding
             )
             copy.rating = book.rating
             copy.reviewNotes = book.reviewNotes
@@ -56,16 +100,29 @@ enum CollectionMergeService {
             copy.addedAt = book.addedAt
             copy.addedByCloudRecordName = book.addedByCloudRecordName
             copy.addedByDisplayName = book.addedByDisplayName
+            targetBooks.append(copy)
+            targetByKey[key] = copy
         }
 
-        source.isActive = false
+        if let sourceOrg = source.org, sourceOrg != targetOrg {
+            let sourceCollections = (sourceOrg.collections as? Set<BookCollection>) ?? []
+            if sourceCollections.count <= 1 {
+                context.delete(sourceOrg)
+            } else {
+                context.delete(source)
+            }
+        } else {
+            context.delete(source)
+        }
         try context.save()
     }
 
-    @MainActor
-    private static func findBook(isbn: String, org: Org, in context: NSManagedObjectContext) -> Book? {
-        let collections = org.collections as? Set<BookCollection> ?? []
-        let books = collections.flatMap { ($0.books as? Set<Book>) ?? [] }
-        return books.first { $0.isbn == isbn }
+    private static func bookIdentityKey(_ book: Book) -> String {
+        BookIdentity.key(
+            isbn: book.isbn,
+            title: book.title,
+            authors: book.authors,
+            publishedYear: book.publishedYearValue
+        )
     }
 }

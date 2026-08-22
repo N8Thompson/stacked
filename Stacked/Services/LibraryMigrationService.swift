@@ -17,6 +17,13 @@ struct MigrationPreview: Identifiable {
     var payload: LibraryExportPayload
 }
 
+enum LibraryImportAccess {
+    /// Used when copying the same library between this user's local and iCloud stores.
+    case preserveExistingLibrary
+    /// Used for additive imports and merges into a library.
+    case enforceLimits(hasPlusAccess: Bool, canContribute: Bool)
+}
+
 struct LibraryExportPayload: Codable {
     var stackedLibraryExport: LibraryExportRoot
 }
@@ -80,8 +87,8 @@ enum LibraryMigrationService {
     }
 
     @MainActor
-    static func portableCSVURL(_ org: Org, context: NSManagedObjectContext) throws -> URL {
-        let books = OrgManager.shared.allBooks(in: context)
+    static func portableCSVURL(_ org: Org, context _: NSManagedObjectContext) throws -> URL {
+        let books = books(in: org)
         var rows = [CSVEscaping.row(portableCSVHeader)]
         for book in books.sorted(by: { $0.title < $1.title }) {
             rows.append(CSVEscaping.row([
@@ -107,8 +114,11 @@ enum LibraryMigrationService {
     }
 
     @MainActor
-    static func backupPayload(_ org: Org, context: NSManagedObjectContext) throws -> LibraryExportPayload {
-        let books = OrgManager.shared.allBooks(in: context)
+    static func backupPayload(_ org: Org, context _: NSManagedObjectContext) throws -> LibraryExportPayload {
+        let books = books(in: org)
+        let locations = ((org.locations as? Set<StorageLocation>) ?? []).map(\.name).sorted()
+        let formats = ((org.formats as? Set<ItemFormat>) ?? []).map(\.name).sorted()
+        let bindings = ((org.bindings as? Set<ItemBinding>) ?? []).map(\.name).sorted()
         return LibraryExportPayload(
             stackedLibraryExport: LibraryExportRoot(
                 version: 1,
@@ -116,9 +126,9 @@ enum LibraryMigrationService {
                 exportedByDisplayName: CloudKitIdentityService.shared.displayName,
                 orgName: org.name,
                 taxonomy: ExportTaxonomy(
-                    locations: OrgManager.shared.locations.map(\.name),
-                    formats: OrgManager.shared.formats.map(\.name),
-                    bindings: OrgManager.shared.bindings.map(\.name)
+                    locations: locations,
+                    formats: formats,
+                    bindings: bindings
                 ),
                 books: books.map(exportBook)
             )
@@ -138,7 +148,14 @@ enum LibraryMigrationService {
             throw BookSearchError.transport("Unsupported export version.")
         }
         let books = payload.stackedLibraryExport.books
-        let unique = Set(books.map { $0.isbn.isEmpty ? $0.title : $0.isbn }).count
+        let unique = Set(books.map {
+            BookIdentity.key(
+                isbn: $0.isbn,
+                title: $0.title,
+                authors: $0.authors,
+                publishedYear: $0.publishedYear
+            )
+        }).count
         let copies = books.reduce(0) { $0 + $1.copies }
         let locations = Set(books.map(\.location).filter { !$0.isEmpty }).count
         return MigrationPreview(
@@ -150,10 +167,17 @@ enum LibraryMigrationService {
     }
 
     @MainActor
-    static func applyImport(_ preview: MigrationPreview, into org: Org, context: NSManagedObjectContext) throws {
-        guard let collection = OrgManager.shared.defaultCollection(in: context) else {
+    static func applyImport(
+        _ preview: MigrationPreview,
+        into org: Org,
+        context: NSManagedObjectContext,
+        access: LibraryImportAccess
+    ) throws {
+        let collections = (org.collections as? Set<BookCollection>) ?? []
+        guard let collection = collections.first(where: \.isActive) ?? collections.first else {
             throw BookSearchError.transport("No collection to import into.")
         }
+        try validateImport(preview, into: org, access: access)
         let identity = CloudKitIdentityService.shared
         let importDate = Date()
 
@@ -167,9 +191,15 @@ enum LibraryMigrationService {
             _ = TaxonomyService.findOrCreateBinding(name: name, org: org, in: context)
         }
 
+        var existingBooks = books(in: org)
+        var booksByKey = Dictionary(
+            existingBooks.map { (bookIdentityKey($0), $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
         for exported in preview.payload.stackedLibraryExport.books {
-            if let isbn = exported.isbn.nilIfEmpty,
-               let existing = findBook(isbn: isbn, in: context) {
+            let key = bookIdentityKey(exported)
+            if let existing = booksByKey[key] {
                 existing.copies += Int32(exported.copies)
                 continue
             }
@@ -207,6 +237,8 @@ enum LibraryMigrationService {
             book.addedAt = importDate
             book.addedByCloudRecordName = identity.recordName ?? ""
             book.addedByDisplayName = identity.displayName
+            booksByKey[key] = book
+            existingBooks.append(book)
         }
 
         try context.save()
@@ -237,11 +269,67 @@ enum LibraryMigrationService {
         )
     }
 
-    private static func findBook(isbn: String, in context: NSManagedObjectContext) -> Book? {
-        let request = Book.fetchRequest()
-        request.predicate = NSPredicate(format: "isbn == %@", isbn)
-        request.fetchLimit = 1
-        return try? context.fetch(request).first
+    private static func validateImport(
+        _ preview: MigrationPreview,
+        into org: Org,
+        access: LibraryImportAccess
+    ) throws {
+        guard case .enforceLimits(let hasPlusAccess, let canContribute) = access else { return }
+        guard canContribute else {
+            throw BookSearchError.transport(
+                "The collection owner's Stacked + access must be active before participants can import books."
+            )
+        }
+        guard !hasPlusAccess else { return }
+
+        let currentBooks = books(in: org)
+        let existingKeys = Set(currentBooks.map(bookIdentityKey))
+        let incomingKeys = Set(preview.payload.stackedLibraryExport.books.map(bookIdentityKey))
+        let newTitleCount = incomingKeys.subtracting(existingKeys).count
+        guard existingKeys.count + newTitleCount <= EntitlementPolicy.freeUniqueTitleLimit else {
+            throw BookSearchError.transport(
+                "This import would exceed the free limit of \(EntitlementPolicy.freeUniqueTitleLimit) unique titles."
+            )
+        }
+
+        let existingLocations = Set(
+            ((org.locations as? Set<StorageLocation>) ?? []).map { BookIdentity.normalizedText($0.name) }
+        )
+        let root = preview.payload.stackedLibraryExport
+        let incomingLocations = Set(
+            (root.taxonomy.locations + root.books.map(\.location))
+                .map(BookIdentity.normalizedText)
+                .filter { !$0.isEmpty }
+        )
+        let newLocationCount = incomingLocations.subtracting(existingLocations).count
+        guard existingLocations.count + newLocationCount <= EntitlementPolicy.freeLocationLimit else {
+            throw BookSearchError.transport(
+                "This import would exceed the free limit of \(EntitlementPolicy.freeLocationLimit) locations."
+            )
+        }
+    }
+
+    private static func books(in org: Org) -> [Book] {
+        let collections = (org.collections as? Set<BookCollection>) ?? []
+        return collections.flatMap { ($0.books as? Set<Book>) ?? [] }
+    }
+
+    private static func bookIdentityKey(_ book: Book) -> String {
+        BookIdentity.key(
+            isbn: book.isbn,
+            title: book.title,
+            authors: book.authors,
+            publishedYear: book.publishedYearValue
+        )
+    }
+
+    private static func bookIdentityKey(_ book: ExportBook) -> String {
+        BookIdentity.key(
+            isbn: book.isbn,
+            title: book.title,
+            authors: book.authors,
+            publishedYear: book.publishedYear
+        )
     }
 
     private static func fileTimestamp() -> String {

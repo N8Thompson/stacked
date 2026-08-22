@@ -137,7 +137,7 @@ struct AddBookSheet: View {
     private var segmentedPicker: some View {
         Picker("Add method", selection: Binding(
             get: { actions.source },
-            set: { actions.requestSourceChange(to: $0, isPlus: subscriptions.isPlus) }
+            set: { actions.requestSourceChange(to: $0, isPlus: subscriptions.currentOrgHasPlusAccess) }
         )) {
             ForEach(SearchSource.addSheetSources) { option in
                 Text(option.segmentTitle).tag(option)
@@ -197,7 +197,11 @@ struct AddBookSheet: View {
                 List(actions.results) { result in
                     SearchResultRow(
                         result: result,
-                        ownedCopies: actions.ownedByISBN(books: books)[result.isbn] ?? 0
+                        ownedCopies: actions.ownedByISBN(books: books)[
+                            BookIdentity.canonicalISBN(result.isbn)
+                                ?? BookIdentity.normalizedISBN(result.isbn)
+                                ?? result.isbn
+                        ] ?? 0
                     ) { count in
                         actions.add(
                             result: result,
@@ -207,7 +211,8 @@ struct AddBookSheet: View {
                             formats: formats,
                             orgManager: orgManager,
                             context: context,
-                            isPlus: subscriptions.isPlus
+                            isPlus: subscriptions.currentOrgHasPlusAccess,
+                            canContribute: subscriptions.canContributeToCurrentOrg
                         )
                     }
                     .listRowBackground(StackedTheme.Surface.primary)
