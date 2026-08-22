@@ -88,10 +88,12 @@ struct AddBookSheet: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             } else {
                 if actions.source == .scanBarcode || actions.source == .scanText {
+                    cameraModePicker
+
                     scannerArea
                         .frame(height: actions.source == .scanBarcode ? 200 : 260)
                         .padding(.horizontal)
-                        .padding(.top, 8)
+                        .padding(.top, 4)
                 }
 
                 if actions.source == .text {
@@ -121,7 +123,9 @@ struct AddBookSheet: View {
 
     private func sourceSegment(_ option: SearchSource) -> some View {
         let enabled = actions.isSourceEnabled(option)
-        let selected = actions.source == option
+        let selected = option == .scanBarcode
+            ? actions.source == .scanBarcode || actions.source == .scanText
+            : actions.source == option
         return Button {
             actions.requestSourceChange(to: option, isPlus: subscriptions.currentOrgHasPlusAccess)
         } label: {
@@ -143,6 +147,24 @@ struct AddBookSheet: View {
         .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.45)
+    }
+
+    private var cameraModePicker: some View {
+        Picker("Camera mode", selection: Binding(
+            get: { actions.source },
+            set: {
+                actions.requestSourceChange(
+                    to: $0,
+                    isPlus: subscriptions.currentOrgHasPlusAccess
+                )
+            }
+        )) {
+            Text("Text").tag(SearchSource.scanText)
+            Text("Barcode").tag(SearchSource.scanBarcode)
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal)
+        .padding(.top, 2)
     }
 
     private var searchField: some View {

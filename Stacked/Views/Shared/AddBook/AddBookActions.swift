@@ -65,7 +65,7 @@ final class AddBookActions {
     }
 
     func handleSourceChange(_ newSource: SearchSource) {
-        guard SearchSource.addSheetSources.contains(newSource), isSourceEnabled(newSource) else {
+        guard SearchSource.supportedSources.contains(newSource), isSourceEnabled(newSource) else {
             source = .text
             return
         }

@@ -8,6 +8,9 @@
 //
 
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 struct BluetoothScannerView: View {
     let actions: AddBookActions
@@ -26,11 +29,12 @@ struct BluetoothScannerView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            statusRow
-            captureField
+            hiddenCaptureField
 
-            if actions.scannerItems.isEmpty {
-                emptyState
+            if !monitor.isConnected {
+                disconnectedState
+            } else if actions.scannerItems.isEmpty {
+                connectedEmptyState
             } else {
                 sessionList
             }
@@ -38,48 +42,30 @@ struct BluetoothScannerView: View {
         .padding(.top, 6)
         .onAppear {
             monitor.start()
-            captureFocused = true
+            captureFocused = monitor.isConnected
         }
         .onDisappear { monitor.stop() }
-    }
-
-    // MARK: Status
-
-    private var statusRow: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(monitor.isConnected ? StackedTheme.Semantic.success : StackedTheme.Text.tertiary)
-                .frame(width: 10, height: 10)
-            Text(monitor.isConnected ? "Scanner connected" : "Scanner not connected")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(StackedTheme.Text.primary)
-            Spacer(minLength: 0)
+        .onChange(of: monitor.isConnected) { _, isConnected in
+            captureFocused = isConnected
         }
-        .padding(.horizontal)
     }
 
     // MARK: Capture field
 
-    private var captureField: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "barcode.viewfinder")
-                .foregroundStyle(.secondary)
-            TextField("Listening for scans…", text: $captureText)
-                .textFieldStyle(.plain)
-                .focused($captureFocused)
-                .submitLabel(.done)
-                .onSubmit(submit)
-                #if os(iOS)
-                .textInputAutocapitalization(.characters)
-                .autocorrectionDisabled()
-                .keyboardType(.asciiCapable)
-                #endif
-        }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10).fill(StackedTheme.Surface.track))
-        .padding(.horizontal)
-        .contentShape(Rectangle())
-        .onTapGesture { captureFocused = true }
+    private var hiddenCaptureField: some View {
+        TextField("", text: $captureText)
+            .textFieldStyle(.plain)
+            .focused($captureFocused)
+            .submitLabel(.done)
+            .onSubmit(submit)
+            #if os(iOS)
+            .textInputAutocapitalization(.characters)
+            .autocorrectionDisabled()
+            .keyboardType(.asciiCapable)
+            #endif
+            .frame(width: 1, height: 1)
+            .opacity(0.01)
+            .accessibilityHidden(true)
     }
 
     private func submit() {
@@ -210,14 +196,20 @@ struct BluetoothScannerView: View {
         )
     }
 
-    private var emptyState: some View {
+    private var connectedEmptyState: some View {
         VStack(spacing: 10) {
             Image(systemName: "barcode.viewfinder")
-                .font(.system(size: 30, weight: .light))
-                .foregroundStyle(StackedTheme.Text.tertiary)
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(StackedTheme.Text.secondary)
+                .overlay(alignment: .topTrailing) {
+                    Circle()
+                        .fill(StackedTheme.Semantic.success)
+                        .frame(width: 9, height: 9)
+                        .offset(x: 5, y: -2)
+                }
             Text("Scan a book to add it")
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(StackedTheme.Text.secondary)
+                .foregroundStyle(StackedTheme.Text.primary)
             Text("Each scan is added instantly. Scanning a book you already own adds another copy.")
                 .font(.caption)
                 .foregroundStyle(StackedTheme.Text.tertiary)
@@ -225,5 +217,49 @@ struct BluetoothScannerView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 32)
+        .contentShape(Rectangle())
+        .onTapGesture { captureFocused = true }
+    }
+
+    private var disconnectedState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "barcode.viewfinder")
+                .font(.system(size: 36, weight: .light))
+                .foregroundStyle(StackedTheme.Text.tertiary)
+
+            Text("Scanner not connected")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(StackedTheme.Text.primary)
+
+            Text(disconnectedInstructions)
+                .font(.caption)
+                .foregroundStyle(StackedTheme.Text.tertiary)
+                .multilineTextAlignment(.center)
+
+            #if os(macOS)
+            Button("Open Bluetooth Settings", action: openBluetoothSettings)
+                .buttonStyle(.borderedProminent)
+                .tint(StackedTheme.accent)
+            #endif
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 32)
+    }
+
+    private var disconnectedInstructions: String {
+        #if os(iOS)
+        "Open Settings → Bluetooth → connect your barcode scanner, then return to Stacked."
+        #else
+        "Connect a Bluetooth barcode scanner in Bluetooth Settings."
+        #endif
+    }
+
+    private func openBluetoothSettings() {
+        #if os(macOS)
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.BluetoothSettings") else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+        #endif
     }
 }

@@ -18,14 +18,21 @@ enum SearchSource: String, CaseIterable, Identifiable {
     var segmentTitle: String {
         switch self {
         case .text: return "Text"
-        case .scanBarcode: return "Camera ISBN"
-        case .scanText: return "Camera Text"
-        case .scanner: return "Bluetooth"
+        case .scanBarcode, .scanText: return "Camera"
+        case .scanner: return "Scanner"
         case .manual: return "Manual"
         }
     }
 
     static var addSheetSources: [SearchSource] {
+        #if os(macOS)
+        [.text, .scanner, .manual]
+        #else
+        [.text, .scanBarcode, .scanner, .manual]
+        #endif
+    }
+
+    static var supportedSources: [SearchSource] {
         #if os(macOS)
         [.text, .scanner, .manual]
         #else

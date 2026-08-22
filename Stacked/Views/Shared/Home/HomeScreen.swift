@@ -26,26 +26,26 @@ struct HomeScreen<Banner: View>: View {
                 summaryHeader
                 #endif
 
-                section(title: "Locations", systemImage: "mappin.and.ellipse") {
+                section(title: "Locations") {
                     ForEach(locations) { location in
                         SummaryTile(
                             title: location.name,
                             count: count(for: location),
                             value: value(for: location),
-                            systemImage: "books.vertical.fill"
+                            systemImage: location.displayIconName
                         ) {
                             router.openManage(location: location)
                         }
                     }
                 }
 
-                section(title: "Formats", systemImage: "tag") {
+                section(title: "Formats") {
                     ForEach(formats) { format in
                         SummaryTile(
                             title: format.name,
                             count: count(for: format),
                             value: value(for: format),
-                            systemImage: "square.stack.3d.up.fill"
+                            systemImage: format.displayIconName
                         ) {
                             router.openManage(format: format)
                         }
@@ -67,9 +67,9 @@ struct HomeScreen<Banner: View>: View {
     }
 
     @ViewBuilder
-    private func section<Content: View>(title: String, systemImage: String, @ViewBuilder content: () -> Content) -> some View {
+    private func section<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label(title, systemImage: systemImage)
+            Text(title)
                 .font(.headline)
                 .foregroundStyle(StackedTheme.Text.primary)
             ScrollView(.horizontal, showsIndicators: false) {

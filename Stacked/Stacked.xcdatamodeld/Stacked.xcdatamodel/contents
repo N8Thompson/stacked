@@ -58,6 +58,7 @@
     </entity>
     <entity name="ItemFormat" representedClassName="ItemFormat" syncable="YES">
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="iconName" attributeType="String" defaultValueString="square.stack.3d.up.fill"/>
         <attribute name="idString" attributeType="String" defaultValueString=""/>
         <attribute name="isDefault" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="name" attributeType="String" defaultValueString=""/>
@@ -66,6 +67,7 @@
     </entity>
     <entity name="StorageLocation" representedClassName="StorageLocation" syncable="YES">
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="iconName" attributeType="String" defaultValueString="books.vertical.fill"/>
         <attribute name="idString" attributeType="String" defaultValueString=""/>
         <attribute name="isDefault" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="name" attributeType="String" defaultValueString=""/>

@@ -419,6 +419,7 @@ struct SettingsContent: View {
                 taxonomyRow(
                     name: location.name,
                     isDefault: location.isDefault,
+                    iconName: location.displayIconName,
                     onRename: { editor = renameLocation(location) },
                     onMakeDefault: location.isDefault ? nil : { makeDefaultLocation(location) },
                     onDelete: locations.count > 1 ? { requestDeleteLocation(location) } : nil
@@ -437,6 +438,7 @@ struct SettingsContent: View {
                 taxonomyRow(
                     name: location.name,
                     isDefault: location.isDefault,
+                    iconName: location.displayIconName,
                     onRename: { editor = renameLocation(location) },
                     onMakeDefault: location.isDefault ? nil : { makeDefaultLocation(location) },
                     onDelete: locations.count > 1 ? { requestDeleteLocation(location) } : nil
@@ -465,6 +467,7 @@ struct SettingsContent: View {
                 taxonomyRow(
                     name: format.name,
                     isDefault: format.isDefault,
+                    iconName: format.displayIconName,
                     onRename: { editor = renameFormat(format) },
                     onMakeDefault: format.isDefault ? nil : { makeDefaultFormat(format) },
                     onDelete: { requestDeleteFormat(format) }
@@ -483,6 +486,7 @@ struct SettingsContent: View {
                 taxonomyRow(
                     name: format.name,
                     isDefault: format.isDefault,
+                    iconName: format.displayIconName,
                     onRename: { editor = renameFormat(format) },
                     onMakeDefault: format.isDefault ? nil : { makeDefaultFormat(format) },
                     onDelete: { requestDeleteFormat(format) }
@@ -570,11 +574,18 @@ struct SettingsContent: View {
     private func taxonomyRow(
         name: String,
         isDefault: Bool,
+        iconName: String? = nil,
         onRename: @escaping () -> Void,
         onMakeDefault: (() -> Void)?,
         onDelete: (() -> Void)?
     ) -> some View {
         HStack(spacing: 8) {
+            if let iconName {
+                Image(systemName: iconName)
+                    .frame(width: 22)
+                    .foregroundStyle(StackedTheme.accent)
+            }
+
             Button(action: onRename) {
                 HStack(spacing: 8) {
                     Text(name)
@@ -593,7 +604,7 @@ struct SettingsContent: View {
             .buttonStyle(.plain)
 
             Menu {
-                Button("Rename", action: onRename)
+                Button(iconName == nil ? "Rename" : "Edit", action: onRename)
                 if let onMakeDefault {
                     Button("Make Default", action: onMakeDefault)
                 }
@@ -898,19 +909,36 @@ struct SettingsContent: View {
     }
 
     private func addLocation() -> NameEditorTarget {
-        NameEditorTarget(title: "New Location", initialName: "") { name in
+        NameEditorTarget(
+            title: "New Location",
+            initialName: "",
+            initialIconName: "books.vertical.fill",
+            iconCategories: LocationIconCatalog.categories
+        ) { name, iconName in
             guard let org else { return }
             let isFirst = locations.isEmpty
-            _ = StorageLocation.create(in: context, org: org, name: name, isDefault: isFirst)
+            _ = StorageLocation.create(
+                in: context,
+                org: org,
+                name: name,
+                isDefault: isFirst,
+                iconName: iconName
+            )
             PersistenceController.shared.save()
         }
     }
 
     private func renameLocation(_ location: StorageLocation) -> NameEditorTarget {
-        NameEditorTarget(title: "Rename Location", initialName: location.name) { name in
+        NameEditorTarget(
+            title: "Edit Location",
+            initialName: location.name,
+            initialIconName: location.displayIconName,
+            iconCategories: LocationIconCatalog.categories
+        ) { name, iconName in
             let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return }
             location.name = trimmed
+            location.iconName = iconName
             PersistenceController.shared.save()
         }
     }
@@ -940,19 +968,36 @@ struct SettingsContent: View {
     }
 
     private func renameFormat(_ format: ItemFormat) -> NameEditorTarget {
-        NameEditorTarget(title: "Rename Format", initialName: format.name) { name in
+        NameEditorTarget(
+            title: "Edit Format",
+            initialName: format.name,
+            initialIconName: format.displayIconName,
+            iconCategories: FormatIconCatalog.categories
+        ) { name, iconName in
             let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { return }
             format.name = trimmed
+            format.iconName = iconName
             PersistenceController.shared.save()
         }
     }
 
     private func addFormat() -> NameEditorTarget {
-        NameEditorTarget(title: "New Format", initialName: "") { name in
+        NameEditorTarget(
+            title: "New Format",
+            initialName: "",
+            initialIconName: "square.stack.3d.up.fill",
+            iconCategories: FormatIconCatalog.categories
+        ) { name, iconName in
             guard let org else { return }
             let isFirst = formats.isEmpty
-            _ = ItemFormat.create(in: context, org: org, name: name, isDefault: isFirst)
+            _ = ItemFormat.create(
+                in: context,
+                org: org,
+                name: name,
+                isDefault: isFirst,
+                iconName: iconName
+            )
             PersistenceController.shared.save()
         }
     }

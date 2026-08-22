@@ -29,7 +29,10 @@ struct SettingsView: View {
             .navigationTitle("Settings")
         }
         .settingsDestinationSheets($sheet)
-        .sheet(item: $editor) { target in
+        .sheet(item: simpleNameEditor) { target in
+            NameEditorSheet(target: target)
+        }
+        .fullScreenCover(item: formatEditor) { target in
             NameEditorSheet(target: target)
         }
         .sheet(item: $deleteRequest) { request in
@@ -60,6 +63,26 @@ struct SettingsView: View {
         } message: {
             Text(taxonomyError ?? "")
         }
+    }
+
+    private var simpleNameEditor: Binding<NameEditorTarget?> {
+        Binding(
+            get: {
+                guard editor?.initialIconName == nil else { return nil }
+                return editor
+            },
+            set: { if $0 == nil { editor = nil } }
+        )
+    }
+
+    private var formatEditor: Binding<NameEditorTarget?> {
+        Binding(
+            get: {
+                guard editor?.initialIconName != nil else { return nil }
+                return editor
+            },
+            set: { if $0 == nil { editor = nil } }
+        )
     }
 }
 #endif
