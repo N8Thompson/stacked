@@ -39,7 +39,7 @@ struct HomeScreen<Banner: View>: View {
                     }
                 }
 
-                section(title: "Formats") {
+                section(title: "Formats", fadesOverflowingEdges: true) {
                     ForEach(formats) { format in
                         SummaryTile(
                             title: format.name,
