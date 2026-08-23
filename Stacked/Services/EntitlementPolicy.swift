@@ -16,7 +16,7 @@ enum EntitlementPolicy {
     static let allProductIDs: Set<String> = [monthlyProductID, annualProductID]
 
     static let termsURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
-    static let privacyURL = URL(string: "https://www.apple.com/legal/privacy/")!
+    static let privacyURL = URL(string: "https://www.gravityware.io/stackedprivacypolicy")!
 
     static func uniqueTitleCount(in books: [Book]) -> Int {
         books.count

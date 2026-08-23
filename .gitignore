@@ -6,6 +6,9 @@ build/
 DerivedData/
 .derivedData/
 .derivedData-build/
+.archives/
+.appstore-upload/
+AppStoreAssets/Screenshots/working/
 *.xcuserstate
 xcuserdata/
 *.moved-aside
