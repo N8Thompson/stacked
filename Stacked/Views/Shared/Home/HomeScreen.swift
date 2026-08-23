@@ -26,7 +26,7 @@ struct HomeScreen<Banner: View>: View {
                 summaryHeader
                 #endif
 
-                section(title: "Locations") {
+                section(title: "Locations", fadesOverflowingEdges: true) {
                     ForEach(locations) { location in
                         SummaryTile(
                             title: location.name,
@@ -67,16 +67,29 @@ struct HomeScreen<Banner: View>: View {
     }
 
     @ViewBuilder
-    private func section<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func section<Content: View>(
+        title: String,
+        fadesOverflowingEdges: Bool = false,
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
                 .font(.headline)
                 .foregroundStyle(StackedTheme.Text.primary)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    content()
+            if fadesOverflowingEdges {
+                FadingHorizontalScrollView {
+                    HStack(spacing: 12) {
+                        content()
+                    }
+                    .padding(.vertical, 2)
                 }
-                .padding(.vertical, 2)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        content()
+                    }
+                    .padding(.vertical, 2)
+                }
             }
         }
     }
@@ -100,6 +113,74 @@ struct HomeScreen<Banner: View>: View {
         books.filter { $0.format?.id == format.id }
             .reduce(0) { $0 + $1.totalValue }
     }
+}
+
+private struct FadingHorizontalScrollView<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    @State private var fadedEdges = HorizontalFadeEdges(leading: false, trailing: true)
+
+    var body: some View {
+        if #available(iOS 18.0, macOS 15.0, *) {
+            scrollView
+                .onScrollGeometryChange(for: HorizontalFadeEdges.self) { geometry in
+                    let minimumOffset = -geometry.contentInsets.leading
+                    let maximumOffset = max(
+                        minimumOffset,
+                        geometry.contentSize.width
+                            - geometry.containerSize.width
+                            + geometry.contentInsets.trailing
+                    )
+
+                    return HorizontalFadeEdges(
+                        leading: geometry.contentOffset.x > minimumOffset + 1,
+                        trailing: geometry.contentOffset.x < maximumOffset - 1
+                    )
+                } action: { _, newValue in
+                    fadedEdges = newValue
+                }
+                .mask { scrollMask }
+        } else {
+            scrollView
+                .mask { trailingOnlyMask }
+        }
+    }
+
+    private var scrollView: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            content()
+        }
+    }
+
+    private var scrollMask: some View {
+        LinearGradient(
+            stops: [
+                .init(color: fadedEdges.leading ? .clear : .black, location: 0),
+                .init(color: .black, location: 0.06),
+                .init(color: .black, location: 0.94),
+                .init(color: fadedEdges.trailing ? .clear : .black, location: 1),
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    private var trailingOnlyMask: some View {
+        LinearGradient(
+            stops: [
+                .init(color: .black, location: 0),
+                .init(color: .black, location: 0.94),
+                .init(color: .clear, location: 1),
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+}
+
+private struct HorizontalFadeEdges: Equatable {
+    let leading: Bool
+    let trailing: Bool
 }
 
 struct SummaryTile: View {
