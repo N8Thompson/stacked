@@ -134,10 +134,6 @@ struct SettingsContent: View {
                 }
                 cardDivider()
             }
-            cardButton(title: "Redeem code", systemImage: "gift") {
-                sheet = .redeemCode
-            }
-            cardDivider()
             cardButton(title: "Restore purchases", systemImage: "arrow.clockwise") {
                 Task { await subscriptions.restore() }
             }
@@ -169,11 +165,6 @@ struct SettingsContent: View {
                 } label: {
                     Label("Upgrade to Stacked +", systemImage: "star")
                 }
-            }
-            Button {
-                sheet = .redeemCode
-            } label: {
-                Label("Redeem code", systemImage: "gift")
             }
             Button {
                 Task { await subscriptions.restore() }
@@ -776,17 +767,12 @@ struct SettingsContent: View {
             return subscriptions.isPlus ? "Subscribed (simulated)" : "Free (simulated)"
         }
         #endif
-        if subscriptions.hasComplimentaryPlus {
-            return "Complimentary"
-        }
         return subscriptions.isPlus ? "Subscribed" : "Free"
     }
 
     private var plusFooter: String {
         let status: String
-        if subscriptions.hasComplimentaryPlus {
-            status = "Stacked + is unlocked with a complimentary code on this Apple Account and works on iPhone and Mac."
-        } else if subscriptions.isPlus {
+        if subscriptions.isPlus {
             status = "Stacked + is active on this Apple Account and works on iPhone and Mac."
         } else {
             status = "Free libraries include \(EntitlementPolicy.freeUniqueTitleLimit) unique titles and \(EntitlementPolicy.freeLocationLimit) locations. Existing titles stay if a subscription ends."

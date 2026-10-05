@@ -25,7 +25,6 @@ final class SubscriptionService: SubscriptionProviding {
     static let shared = SubscriptionService()
 
     private(set) var isPlus = false
-    private(set) var hasComplimentaryPlus = false
     private(set) var hasStoreSubscription = false
     private(set) var storeExpirationDate: Date?
     private(set) var products: [Product] = []
@@ -34,7 +33,6 @@ final class SubscriptionService: SubscriptionProviding {
 
     private var storeIsPlus = false
     private var updatesTask: Task<Void, Never>?
-    private var iCloudObserver: NSObjectProtocol?
 
     #if DEBUG
     private static let debugOverrideKey = "stacked.debugForcePlus"
@@ -45,20 +43,21 @@ final class SubscriptionService: SubscriptionProviding {
     #endif
 
     private init() {
-        PlusPromoCodeStore.refreshFromiCloud()
-        observeiCloudPromoUnlock()
         applyResolvedEntitlement()
     }
 
     func load() async {
         isLoading = true
         defer { isLoading = false }
-        PlusPromoCodeStore.refreshFromiCloud()
+        purchaseError = nil
         do {
             products = try await Product.products(for: EntitlementPolicy.allProductIDs)
                 .sorted { $0.price < $1.price }
+            if products.isEmpty {
+                purchaseError = "Subscriptions are temporarily unavailable. Please try again shortly."
+            }
         } catch {
-            purchaseError = error.localizedDescription
+            purchaseError = friendlyPurchaseError(error)
         }
         await refreshEntitlements()
         startListeningForUpdatesIfNeeded()
@@ -73,33 +72,30 @@ final class SubscriptionService: SubscriptionProviding {
                 let transaction = try checkVerified(verification)
                 await refreshEntitlements()
                 await transaction.finish()
-            case .userCancelled, .pending:
+            case .userCancelled:
                 break
+            case .pending:
+                purchaseError = "Purchase is pending approval. You’ll get access after it’s approved."
             @unknown default:
                 break
             }
         } catch {
-            purchaseError = error.localizedDescription
+            purchaseError = friendlyPurchaseError(error)
         }
     }
 
     func restore() async {
         purchaseError = nil
-        PlusPromoCodeStore.refreshFromiCloud()
         do {
             try await AppStore.sync()
             await refreshEntitlements()
+            if !isPlus {
+                purchaseError = "No active Stacked + subscription was found for this Apple Account."
+            }
         } catch {
-            purchaseError = error.localizedDescription
+            purchaseError = friendlyPurchaseError(error)
         }
         applyResolvedEntitlement()
-    }
-
-    @discardableResult
-    func redeemPromoCode(_ raw: String) -> PlusPromoCode.RedeemResult {
-        let result = PlusPromoCodeStore.redeem(raw)
-        applyResolvedEntitlement()
-        return result
     }
 
     func refreshEntitlements() async {
@@ -120,7 +116,6 @@ final class SubscriptionService: SubscriptionProviding {
         }
         storeIsPlus = entitled
         storeExpirationDate = latestExpiration
-        PlusPromoCodeStore.refreshFromiCloud()
         applyResolvedEntitlement()
         await OrgSharingService.shared.publishOwnerEntitlementIfNeeded()
     }
@@ -133,7 +128,6 @@ final class SubscriptionService: SubscriptionProviding {
     #endif
 
     private func applyResolvedEntitlement() {
-        hasComplimentaryPlus = PlusPromoCodeStore.isUnlocked
         hasStoreSubscription = storeIsPlus
         #if DEBUG
         if UserDefaults.standard.object(forKey: Self.debugOverrideKey) != nil {
@@ -141,7 +135,7 @@ final class SubscriptionService: SubscriptionProviding {
             return
         }
         #endif
-        isPlus = storeIsPlus || hasComplimentaryPlus
+        isPlus = storeIsPlus
     }
 
     func hasPlusAccess(for org: Org?, role: OrgRole) -> Bool {
@@ -168,20 +162,6 @@ final class SubscriptionService: SubscriptionProviding {
         return true
     }
 
-    private func observeiCloudPromoUnlock() {
-        iCloudObserver = NotificationCenter.default.addObserver(
-            forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
-            object: NSUbiquitousKeyValueStore.default,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                PlusPromoCodeStore.refreshFromiCloud()
-                self?.applyResolvedEntitlement()
-            }
-        }
-        NSUbiquitousKeyValueStore.default.synchronize()
-    }
-
     private func startListeningForUpdatesIfNeeded() {
         guard updatesTask == nil else { return }
         updatesTask = Task { [weak self] in
@@ -205,6 +185,30 @@ final class SubscriptionService: SubscriptionProviding {
         case .verified(let value):
             return value
         }
+    }
+
+    private func friendlyPurchaseError(_ error: Error) -> String {
+        if let storeKitError = error as? StoreKitError {
+            switch storeKitError {
+            case .networkError:
+                return "A network error occurred. Check your connection and try again."
+            case .systemError:
+                return "Unable to complete the purchase. Please try again in a moment."
+            case .notAvailableInStorefront:
+                return "This subscription isn’t available in your App Store country or region."
+            case .notEntitled:
+                return "This Apple Account isn’t entitled to this purchase."
+            case .userCancelled:
+                return "Purchase canceled."
+            default:
+                break
+            }
+        }
+        let message = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        if message.isEmpty || message.localizedCaseInsensitiveContains("Unable to Complete Request") {
+            return "Unable to complete the purchase. Confirm you’re signed into the App Store and try again."
+        }
+        return message
     }
 }
 

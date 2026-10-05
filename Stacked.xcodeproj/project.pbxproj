@@ -239,7 +239,7 @@
 				CODE_SIGN_ENTITLEMENTS = Stacked/Stacked.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Stacked/Stacked.mac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"Stacked/Preview Content\"";
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -289,7 +289,7 @@
 				CODE_SIGN_ENTITLEMENTS = Stacked/Stacked.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Stacked/Stacked.mac.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "\"Stacked/Preview Content\"";
 				ENABLE_HARDENED_RUNTIME = YES;

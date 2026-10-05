@@ -14,7 +14,6 @@ struct PaywallView: View {
 
     @State private var selectedTier: PaywallTier = .plus
     @State private var selectedPeriod: PlusPeriod = .annual
-    @State private var showRedeemCode = false
 
     private enum PaywallTier {
         case plus
@@ -67,14 +66,6 @@ struct PaywallView: View {
         }
         .onChange(of: subscriptions.isPlus) { _, entitled in
             if entitled { dismiss() }
-        }
-        .sheet(isPresented: $showRedeemCode) {
-            NavigationStack {
-                RedeemPlusCodeView()
-            }
-            #if os(macOS)
-            .frame(minWidth: 360, minHeight: 280)
-            #endif
         }
     }
 
@@ -375,25 +366,17 @@ struct PaywallView: View {
     }
 
     private var legalLinks: some View {
-        VStack(spacing: 12) {
-            Button("Have a code?") {
-                showRedeemCode = true
+        HStack(spacing: 0) {
+            Button("Restore Purchase") {
+                Task { await subscriptions.restore() }
             }
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(StackedTheme.Brand.cream.opacity(0.8))
-
-            HStack(spacing: 0) {
-                Button("Restore Purchase") {
-                    Task { await subscriptions.restore() }
-                }
-                Spacer()
-                Link("Privacy Policy", destination: EntitlementPolicy.privacyURL)
-                Spacer()
-                Link("Terms of Use", destination: EntitlementPolicy.termsURL)
-            }
-            .font(.footnote)
-            .foregroundStyle(StackedTheme.Brand.cream.opacity(0.55))
+            Spacer()
+            Link("Privacy Policy", destination: EntitlementPolicy.privacyURL)
+            Spacer()
+            Link("Terms of Use", destination: EntitlementPolicy.termsURL)
         }
+        .font(.footnote)
+        .foregroundStyle(StackedTheme.Brand.cream.opacity(0.55))
         .padding(.top, 4)
     }
 

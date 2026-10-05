@@ -89,14 +89,6 @@ final class EntitlementPolicyTests: XCTestCase {
             )
         )
     }
-
-    func testPromoCodeValidationIsCaseInsensitiveAndIgnoresSpaces() {
-        XCTAssertTrue(PlusPromoCode.isValidCode("9bjp-qa4b-cmwm-bwa2"))
-        XCTAssertTrue(PlusPromoCode.isValidCode(" 9BJP-QA4B-CMWM-BWA2 "))
-        XCTAssertTrue(PlusPromoCode.isValidCode("9BJP QA4B CMWM BWA2"))
-        XCTAssertFalse(PlusPromoCode.isValidCode("STACKED-PLUS"))
-        XCTAssertFalse(PlusPromoCode.isValidCode(""))
-    }
 }
 
 final class BookIdentityTests: XCTestCase {

@@ -161,7 +161,7 @@ final class OrgSharingService {
     func publishOwnerEntitlementIfNeeded(for org: Org?) async {
         guard currentRole == .owner, let org else { return }
         let subscriptions = SubscriptionService.shared
-        let permanent = subscriptions.hasComplimentaryPlus
+        let permanent = false
         let expiration = subscriptions.hasStoreSubscription ? subscriptions.storeExpirationDate : nil
         guard org.ownerHasPermanentPlus != permanent
                 || org.ownerPlusExpirationDate != expiration else { return }

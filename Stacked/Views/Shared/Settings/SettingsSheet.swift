@@ -10,7 +10,6 @@ enum SettingsSheet: Identifiable {
     case paywall(String)
     case faqs
     case cost
-    case redeemCode
 
     var id: String {
         switch self {
@@ -18,7 +17,6 @@ enum SettingsSheet: Identifiable {
         case .paywall: return "paywall"
         case .faqs: return "faqs"
         case .cost: return "cost"
-        case .redeemCode: return "redeemCode"
         }
     }
 }
@@ -44,13 +42,6 @@ extension View {
                 }
                 #if os(macOS)
                 .frame(minWidth: 480, minHeight: 420)
-                #endif
-            case .redeemCode:
-                NavigationStack {
-                    RedeemPlusCodeView()
-                }
-                #if os(macOS)
-                .frame(minWidth: 360, minHeight: 280)
                 #endif
             }
         }
